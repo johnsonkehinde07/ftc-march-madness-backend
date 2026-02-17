@@ -1,3 +1,7 @@
+// Add this at the VERY TOP of the file
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first'); // Force Node.js to use IPv4 instead of IPv6
+
 const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
