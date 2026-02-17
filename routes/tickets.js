@@ -105,16 +105,23 @@ router.post('/purchase', async (req, res) => {
     });
     
     if (payment.status) {
-      // Save payment reference
+      // Get the payment reference
       const paystackReference = payment.data.reference;
-      console.log('💰 Paystack reference:', paystackReference);
       
+      if (!paystackReference) {
+        console.error('❌ No reference from Paystack!');
+        throw new Error('No payment reference received');
+      }
+      
+      console.log(`💰 Paystack reference: ${paystackReference}`);
+      
+      // Save payment reference to ticket
       ticket.paymentReference = paystackReference;
       await ticket.save();
       
       // Verify it saved
-      const savedTicket = await Ticket.findById(ticket._id);
-      console.log(`✅ Payment reference saved: ${savedTicket.paymentReference} for ticket ${savedTicket.ticketId}`);
+      const verifyTicket = await Ticket.findById(ticket._id);
+      console.log(`✅ Payment reference saved: ${verifyTicket.paymentReference} for ticket ${verifyTicket.ticketId}`);
       
       res.json({
         success: true,
@@ -157,10 +164,33 @@ router.post('/verify-payment', async (req, res) => {
     
     if (!ticket) {
       console.log(`❌ No ticket found for reference: ${reference}`);
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Ticket not found' 
-      });
+      
+      // Try to find by recent tickets with this email (maybe reference wasn't saved)
+      const verification = await verifyPayment(reference).catch(() => null);
+      if (verification && verification.data) {
+        const customerEmail = verification.data.customer?.email;
+        if (customerEmail) {
+          console.log(`🔍 Looking for recent tickets with email: ${customerEmail}`);
+          const recentTicket = await Ticket.findOne({ 
+            email: customerEmail,
+            paymentStatus: 'pending'
+          }).sort({ createdAt: -1 });
+          
+          if (recentTicket) {
+            console.log(`✅ Found recent ticket: ${recentTicket.ticketId}`);
+            ticket = recentTicket;
+            ticket.paymentReference = reference;
+            await ticket.save();
+          }
+        }
+      }
+      
+      if (!ticket) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Ticket not found' 
+        });
+      }
     }
     
     // If already paid, just return success
