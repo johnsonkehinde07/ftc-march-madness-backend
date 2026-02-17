@@ -15,6 +15,11 @@ app.use(cors({
   ],
   credentials: true
 }));
+
+// THESE TWO LINES ARE CRITICAL - THEY WERE MISSING!
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // MongoDB Connection - USING .ENV VARIABLE
 const MONGODB_URI = process.env.MONGODB_URI;
 
