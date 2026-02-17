@@ -105,13 +105,16 @@ router.post('/purchase', async (req, res) => {
     });
     
     if (payment.status) {
-      // CRITICAL FIX: Save payment reference and verify immediately
-      ticket.paymentReference = payment.data.reference;
+      // Save payment reference
+      const paystackReference = payment.data.reference;
+      console.log('💰 Paystack reference:', paystackReference);
+      
+      ticket.paymentReference = paystackReference;
       await ticket.save();
       
-      // Double-check it saved
-      const verifyTicket = await Ticket.findById(ticket._id);
-      console.log(`✅ Payment reference saved: ${verifyTicket.paymentReference} for ticket ${verifyTicket.ticketId}`);
+      // Verify it saved
+      const savedTicket = await Ticket.findById(ticket._id);
+      console.log(`✅ Payment reference saved: ${savedTicket.paymentReference} for ticket ${savedTicket.ticketId}`);
       
       res.json({
         success: true,
@@ -119,7 +122,7 @@ router.post('/purchase', async (req, res) => {
         data: {
           ticketId: ticket.ticketId,
           authorization_url: payment.data.authorization_url,
-          reference: payment.data.reference
+          reference: paystackReference
         }
       });
     } else {
@@ -132,90 +135,6 @@ router.post('/purchase', async (req, res) => {
       success: false, 
       message: 'Error processing purchase: ' + error.message 
     });
-  }
-});
-
-// WEBHOOK ENDPOINT - This is what Paystack calls automatically
-router.post('/paystack-webhook', async (req, res) => {
-  try {
-    const event = req.body;
-    console.log('📩 Webhook received:', event.event);
-    console.log('Webhook data:', JSON.stringify(event.data, null, 2));
-    
-    if (event.event === 'charge.success') {
-      const reference = event.data.reference;
-      const metadata = event.data.metadata;
-      
-      console.log(`🔍 Looking for ticket with reference: ${reference}`);
-      
-      // Find ticket by payment reference
-      const ticket = await Ticket.findOne({ paymentReference: reference });
-      
-      if (!ticket) {
-        console.log(`❌ No ticket found for reference: ${reference}`);
-        // Try to find by metadata.ticketId as fallback
-        if (metadata && metadata.ticketId) {
-          console.log(`🔍 Trying fallback search with ticketId: ${metadata.ticketId}`);
-          const fallbackTicket = await Ticket.findOne({ ticketId: metadata.ticketId });
-          if (fallbackTicket) {
-            console.log(`✅ Found ticket via fallback: ${fallbackTicket.ticketId}`);
-            // Update the ticket with the reference
-            fallbackTicket.paymentReference = reference;
-            fallbackTicket.paymentStatus = 'paid';
-            fallbackTicket.paidAt = new Date();
-            await fallbackTicket.save();
-            
-            // Generate QR code and send email here
-            const generateQRCode = require('../utils/qrGenerator');
-            const sendTicketEmail = require('../utils/emailService');
-            
-            const qrResult = await generateQRCode(fallbackTicket);
-            fallbackTicket.qrCode = qrResult.qrCode;
-            fallbackTicket.qrCodeData = qrResult.qrData;
-            await fallbackTicket.save();
-            
-            await sendTicketEmail(fallbackTicket, qrResult.qrCode);
-            
-            const eventDoc = await Event.getEvent();
-            eventDoc.firstBatch.sold += 1;
-            await eventDoc.save();
-            
-            console.log(`✅ Ticket ${fallbackTicket.ticketId} completed via fallback`);
-          }
-        }
-        return res.sendStatus(200);
-      }
-      
-      console.log(`✅ Ticket found: ${ticket.ticketId}`);
-      
-      // Generate QR code
-      const generateQRCode = require('../utils/qrGenerator');
-      const sendTicketEmail = require('../utils/emailService');
-      
-      const qrResult = await generateQRCode(ticket);
-      
-      // Update ticket
-      ticket.paymentStatus = 'paid';
-      ticket.paidAt = new Date();
-      ticket.qrCode = qrResult.qrCode;
-      ticket.qrCodeData = qrResult.qrData;
-      await ticket.save();
-      
-      // Send email with QR code
-      await sendTicketEmail(ticket, qrResult.qrCode);
-      
-      // Update event count
-      const eventDoc = await Event.getEvent();
-      eventDoc.firstBatch.sold += 1;
-      await eventDoc.save();
-      
-      console.log(`✅ Ticket ${ticket.ticketId} completed successfully`);
-    }
-    
-    res.sendStatus(200);
-  } catch (error) {
-    console.error('❌ Webhook Error:', error);
-    res.sendStatus(500);
   }
 });
 
@@ -233,65 +152,77 @@ router.post('/verify-payment', async (req, res) => {
     
     console.log(`🔍 Verifying payment: ${reference}`);
     
-    // First check if ticket already exists with this reference
+    // Find ticket by reference
     let ticket = await Ticket.findOne({ paymentReference: reference });
     
     if (!ticket) {
-      // If not found, verify with Paystack
-      const verification = await verifyPayment(reference);
-      
-      if (verification.data.status === 'success') {
-        // Try to find by metadata
-        const metadata = verification.data.metadata;
-        if (metadata && metadata.ticketId) {
-          ticket = await Ticket.findOne({ ticketId: metadata.ticketId });
-          
-          if (ticket) {
-            // Update ticket with reference
-            ticket.paymentReference = reference;
-            ticket.paymentStatus = 'paid';
-            ticket.paidAt = new Date();
-            
-            // Generate QR code
-            const generateQRCode = require('../utils/qrGenerator');
-            const sendTicketEmail = require('../utils/emailService');
-            
-            const qrResult = await generateQRCode(ticket);
-            ticket.qrCode = qrResult.qrCode;
-            ticket.qrCodeData = qrResult.qrData;
-            await ticket.save();
-            
-            // Send email
-            await sendTicketEmail(ticket, qrResult.qrCode);
-            
-            // Update event count
-            const event = await Event.getEvent();
-            event.firstBatch.sold += 1;
-            await event.save();
-            
-            console.log(`✅ Ticket ${ticket.ticketId} verified and completed`);
-          }
-        }
-      }
-    }
-    
-    if (!ticket) {
+      console.log(`❌ No ticket found for reference: ${reference}`);
       return res.status(404).json({ 
         success: false, 
         message: 'Ticket not found' 
       });
     }
     
-    res.json({
-      success: true,
-      message: 'Payment verified successfully',
-      data: {
-        ticketId: ticket.ticketId,
-        name: ticket.name,
-        email: ticket.email,
-        price: 8000
-      }
-    });
+    // If already paid, just return success
+    if (ticket.paymentStatus === 'paid') {
+      console.log(`✅ Ticket ${ticket.ticketId} already paid`);
+      return res.json({
+        success: true,
+        message: 'Payment already verified',
+        data: {
+          ticketId: ticket.ticketId,
+          name: ticket.name,
+          email: ticket.email,
+          price: 8000
+        }
+      });
+    }
+    
+    // Verify with Paystack
+    const verification = await verifyPayment(reference);
+    
+    if (verification.data.status === 'success') {
+      // Generate QR code
+      const generateQRCode = require('../utils/qrGenerator');
+      const sendTicketEmail = require('../utils/emailService');
+      
+      const qrResult = await generateQRCode(ticket);
+      
+      // Update ticket
+      ticket.paymentStatus = 'paid';
+      ticket.paidAt = new Date();
+      ticket.qrCode = qrResult.qrCode;
+      ticket.qrCodeData = qrResult.qrData;
+      await ticket.save();
+      
+      // Send email (don't wait for it)
+      sendTicketEmail(ticket, qrResult.qrCode).catch(err => {
+        console.log('Email sending in background:', err.message);
+      });
+      
+      // Update event count
+      const event = await Event.getEvent();
+      event.firstBatch.sold += 1;
+      await event.save();
+      
+      console.log(`✅ Ticket ${ticket.ticketId} verified and completed`);
+      
+      res.json({
+        success: true,
+        message: 'Payment verified successfully',
+        data: {
+          ticketId: ticket.ticketId,
+          name: ticket.name,
+          email: ticket.email,
+          price: 8000
+        }
+      });
+    } else {
+      res.status(400).json({ 
+        success: false, 
+        message: 'Payment verification failed' 
+      });
+    }
     
   } catch (error) {
     console.error('❌ Verification Error:', error);
