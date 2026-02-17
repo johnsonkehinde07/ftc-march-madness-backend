@@ -11,7 +11,7 @@ const initializePayment = async (email, amount, metadata) => {
       email: email,
       amount: amount * 100, // Paystack uses kobo (multiply by 100)
       metadata: metadata,
-      callback_url: 'https://prevalently-metalliferous-gerardo.ngrok-free.dev/payment-callback.html'
+      callback_url: 'https://ftc-march-madness.netlify.app/payment-callback.html'
     }, {
       headers: {
         Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
@@ -67,6 +67,9 @@ router.get('/availability', async (req, res) => {
 router.post('/purchase', async (req, res) => {
   try {
     const { name, email, phone } = req.body;
+    
+    // Log received data for debugging
+    console.log('Purchase request received:', { name, email, phone });
     
     // Validation
     if (!name || !email) {
