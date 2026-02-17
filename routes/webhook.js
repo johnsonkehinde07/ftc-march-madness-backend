@@ -3,7 +3,7 @@ const router = express.Router();
 const Ticket = require('../models/Ticket');
 const Event = require('../models/Event');
 const generateQRCode = require('../utils/qrGenerator');
-const sendTicketEmail = require('../utils/emailService');
+const sendTicketEmailResend = require('../utils/emailResend'); // CHANGED THIS LINE
 
 // Paystack webhook endpoint
 router.post('/paystack-webhook', async (req, res) => {
@@ -84,18 +84,18 @@ router.post('/paystack-webhook', async (req, res) => {
       await ticket.save();
       console.log('✅ Ticket updated in database');
       
-      // Send email (don't wait for it - fire and forget)
-      console.log(`📧 Sending email to ${ticket.email}...`);
-      sendTicketEmail(ticket, qrResult.qrCode)
+      // Send email with Resend (don't wait for it - fire and forget)
+      console.log(`📧 Sending email via Resend to ${ticket.email}...`);
+      sendTicketEmailResend(ticket, qrResult.qrCode)
         .then(success => {
           if (success) {
-            console.log(`✅ Email sent successfully to ${ticket.email}`);
+            console.log(`✅ Resend email sent successfully to ${ticket.email}`);
           } else {
-            console.log(`❌ Email failed to send to ${ticket.email}`);
+            console.log(`❌ Resend email failed to send to ${ticket.email}`);
           }
         })
         .catch(err => {
-          console.log('Email sending error:', err.message);
+          console.log('Resend email error:', err.message);
         });
       
       // Update event count
