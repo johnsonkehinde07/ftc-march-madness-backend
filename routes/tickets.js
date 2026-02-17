@@ -214,7 +214,7 @@ router.post('/verify-payment', async (req, res) => {
     if (verification.data.status === 'success') {
       // Generate QR code
       const generateQRCode = require('../utils/qrGenerator');
-      const sendTicketEmail = require('../utils/emailService');
+      const sendTicketEmail = require('../utils/emailResend'); // FIXED: Changed to Resend
       
       const qrResult = await generateQRCode(ticket);
       
@@ -225,10 +225,19 @@ router.post('/verify-payment', async (req, res) => {
       ticket.qrCodeData = qrResult.qrData;
       await ticket.save();
       
-      // Send email (don't wait for it)
-      sendTicketEmail(ticket, qrResult.qrCode).catch(err => {
-        console.log('Email sending in background:', err.message);
-      });
+      // Send email with Resend (don't wait for it)
+      console.log(`📧 Sending email via Resend to ${ticket.email}...`);
+      sendTicketEmail(ticket, qrResult.qrCode)
+        .then(success => {
+          if (success) {
+            console.log(`✅ Email sent successfully to ${ticket.email}`);
+          } else {
+            console.log(`❌ Email failed to send to ${ticket.email}`);
+          }
+        })
+        .catch(err => {
+          console.log('Email sending error:', err.message);
+        });
       
       // Update event count
       const event = await Event.getEvent();
