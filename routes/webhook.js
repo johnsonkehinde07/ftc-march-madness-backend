@@ -3,7 +3,7 @@ const router = express.Router();
 const Ticket = require('../models/Ticket');
 const Event = require('../models/Event');
 const generateQRCode = require('../utils/qrGenerator');
-const sendTicketEmailResend = require('../utils/emailResend'); // CHANGED THIS LINE
+const sendTicketEmailResend = require('../utils/emailResend');
 
 // Paystack webhook endpoint
 router.post('/paystack-webhook', async (req, res) => {
@@ -12,7 +12,6 @@ router.post('/paystack-webhook', async (req, res) => {
     
     console.log('========== WEBHOOK RECEIVED ==========');
     console.log('Event:', webhookEvent.event);
-    console.log('Full webhook data:', JSON.stringify(webhookEvent.data, null, 2));
     
     if (webhookEvent.event === 'charge.success') {
       const reference = webhookEvent.data.reference;
@@ -21,7 +20,6 @@ router.post('/paystack-webhook', async (req, res) => {
       
       console.log(`🔍 Webhook processing reference: ${reference}`);
       console.log('Customer email:', customerEmail);
-      console.log('Metadata:', metadata);
       
       // Try multiple ways to find the ticket
       let ticket = null;
@@ -36,7 +34,6 @@ router.post('/paystack-webhook', async (req, res) => {
         ticket = await Ticket.findOne({ ticketId: metadata.ticketId });
         if (ticket) {
           console.log('✅ Found by metadata.ticketId');
-          // Update the ticket with the reference
           ticket.paymentReference = reference;
           await ticket.save();
         }
@@ -84,18 +81,18 @@ router.post('/paystack-webhook', async (req, res) => {
       await ticket.save();
       console.log('✅ Ticket updated in database');
       
-      // Send email with Resend (don't wait for it - fire and forget)
+      // Send email with Resend (fire and forget)
       console.log(`📧 Sending email via Resend to ${ticket.email}...`);
       sendTicketEmailResend(ticket, qrResult.qrCode)
         .then(success => {
           if (success) {
-            console.log(`✅ Resend email sent successfully to ${ticket.email}`);
+            console.log(`✅ Email sent successfully to ${ticket.email}`);
           } else {
-            console.log(`❌ Resend email failed to send to ${ticket.email}`);
+            console.log(`❌ Email failed to send to ${ticket.email}`);
           }
         })
         .catch(err => {
-          console.log('Resend email error:', err.message);
+          console.log('Email sending error:', err.message);
         });
       
       // Update event count
@@ -104,7 +101,7 @@ router.post('/paystack-webhook', async (req, res) => {
       await event.save();
       console.log(`✅ Event count updated: ${event.firstBatch.sold}/${event.firstBatch.limit}`);
       
-      console.log(`========== WEBHOOK PROCESSING COMPLETE for ${ticket.ticketId} ==========`);
+      console.log(`========== WEBHOOK COMPLETE for ${ticket.ticketId} ==========`);
     }
     
     res.sendStatus(200);
