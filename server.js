@@ -9,11 +9,12 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5500', 'https://your-frontend.netlify.app'],
+  origin: [
+    'http://localhost:5500',
+    'https://ftc-march-madness.netlify.app'
+  ],
   credentials: true
 }));
-app.use(express.json());
-
 // MongoDB Connection - USING .ENV VARIABLE
 const MONGODB_URI = process.env.MONGODB_URI;
 
