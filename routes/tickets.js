@@ -42,22 +42,71 @@ const verifyPayment = async (reference) => {
   }
 };
 
-// Check availability
-router.get('/availability', async (req, res) => {
+// GET available ticket types
+router.get('/types', async (req, res) => {
   try {
-    const event = await Event.findOne();
-    const available = event ? event.firstBatch.limit - event.firstBatch.sold : 30;
-    const price = event ? event.firstBatch.price : 8000;
+    const event = await Event.getEvent();
+    const availableTypes = event.ticketTypes
+      .filter(t => t.isActive)
+      .map(t => ({
+        name: t.name,
+        price: t.price,
+        available: t.limit - t.sold,
+        limit: t.limit,
+        sold: t.sold,
+        description: t.description
+      }));
     
     res.json({
       success: true,
-      data: {
-        available: available,
-        price: price,
-        total: 30,
-        sold: event ? event.firstBatch.sold : 0
-      }
+      data: availableTypes
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Check availability for a specific ticket type
+router.get('/availability/:type?', async (req, res) => {
+  try {
+    const event = await Event.getEvent();
+    const { type } = req.params;
+    
+    if (type) {
+      const ticketType = event.getTicketType(type);
+      if (!ticketType) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Ticket type not found' 
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: {
+          name: ticketType.name,
+          price: ticketType.price,
+          available: ticketType.limit - ticketType.sold,
+          sold: ticketType.sold,
+          limit: ticketType.limit
+        }
+      });
+    } else {
+      // Return all types
+      const allTypes = event.ticketTypes.map(t => ({
+        name: t.name,
+        price: t.price,
+        available: t.limit - t.sold,
+        sold: t.sold,
+        limit: t.limit,
+        isActive: t.isActive
+      }));
+      
+      res.json({
+        success: true,
+        data: allTypes
+      });
+    }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -66,22 +115,36 @@ router.get('/availability', async (req, res) => {
 // Initialize ticket purchase (redirect to Paystack)
 router.post('/purchase', async (req, res) => {
   try {
-    const { name, email, phone } = req.body;
+    const { name, email, phone, ticketType } = req.body;
     
-    console.log('📝 Purchase request received:', { name, email, phone });
+    console.log('📝 Purchase request received:', { name, email, phone, ticketType });
     
-    if (!name || !email) {
+    if (!name || !email || !ticketType) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Name and email are required' 
+        message: 'Name, email and ticket type are required' 
       });
     }
     
     const event = await Event.getEvent();
-    if (event.firstBatch.sold >= event.firstBatch.limit) {
+    
+    // Find the selected ticket type
+    const selectedType = event.ticketTypes.find(t => 
+      t.name === ticketType && t.isActive
+    );
+    
+    if (!selectedType) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Tickets are sold out' 
+        message: 'Invalid or unavailable ticket type' 
+      });
+    }
+    
+    // Check availability
+    if (selectedType.sold >= selectedType.limit) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `${selectedType.name} tickets are sold out` 
       });
     }
     
@@ -90,31 +153,32 @@ router.post('/purchase', async (req, res) => {
       name,
       email,
       phone,
+      ticketType: selectedType.name,
+      price: selectedType.price,
       ticketId: 'FTC' + Date.now() + Math.floor(Math.random() * 1000),
       paymentStatus: 'pending'
     });
     
     await ticket.save();
-    console.log(`🎫 Ticket created: ${ticket.ticketId} for ${email}`);
+    console.log(`🎫 Ticket created: ${ticket.ticketId} for ${email} (${selectedType.name})`);
     
-    // ===== FEE ADDED HERE =====
-    const ticketPrice = event.firstBatch.price; // 8000
+    // Add checkout fee (₦300)
     const checkoutFee = 300;
-    const totalAmount = ticketPrice + checkoutFee; // 8300
+    const totalAmount = selectedType.price + checkoutFee;
     
-    console.log(`💰 Amount breakdown: Ticket ₦${ticketPrice} + Fee ₦${checkoutFee} = Total ₦${totalAmount}`);
+    console.log(`💰 Amount breakdown: ${selectedType.name} ₦${selectedType.price} + Fee ₦${checkoutFee} = Total ₦${totalAmount}`);
     
-    // Initialize Paystack payment with TOTAL amount (includes fee)
+    // Initialize Paystack payment
     const payment = await initializePayment(email, totalAmount, {
       ticketId: ticket.ticketId,
       name: name,
       phone: phone,
-      ticketPrice: ticketPrice,
+      ticketType: selectedType.name,
+      ticketPrice: selectedType.price,
       checkoutFee: checkoutFee
     });
     
     if (payment.status) {
-      // Get the payment reference
       const paystackReference = payment.data.reference;
       
       if (!paystackReference) {
@@ -124,11 +188,9 @@ router.post('/purchase', async (req, res) => {
       
       console.log(`💰 Paystack reference: ${paystackReference}`);
       
-      // Save payment reference to ticket
       ticket.paymentReference = paystackReference;
       await ticket.save();
       
-      // Verify it saved
       const verifyTicket = await Ticket.findById(ticket._id);
       console.log(`✅ Payment reference saved: ${verifyTicket.paymentReference} for ticket ${verifyTicket.ticketId}`);
       
@@ -137,10 +199,10 @@ router.post('/purchase', async (req, res) => {
         message: 'Redirect to payment',
         data: {
           ticketId: ticket.ticketId,
+          ticketType: selectedType.name,
+          displayPrice: selectedType.price,
           authorization_url: payment.data.authorization_url,
-          reference: paystackReference,
-          // Frontend still shows 8000
-          displayPrice: ticketPrice
+          reference: paystackReference
         }
       });
     } else {
@@ -176,11 +238,16 @@ router.post('/verify-payment', async (req, res) => {
     if (!ticket) {
       console.log(`❌ No ticket found for reference: ${reference}`);
       
-      // Try to find by recent tickets with this email (maybe reference wasn't saved)
       const verification = await verifyPayment(reference).catch(() => null);
       if (verification && verification.data) {
         const customerEmail = verification.data.customer?.email;
-        if (customerEmail) {
+        const metadata = verification.data.metadata || {};
+        
+        if (metadata.ticketId) {
+          ticket = await Ticket.findOne({ ticketId: metadata.ticketId });
+        }
+        
+        if (!ticket && customerEmail) {
           console.log(`🔍 Looking for recent tickets with email: ${customerEmail}`);
           const recentTicket = await Ticket.findOne({ 
             email: customerEmail,
@@ -204,7 +271,6 @@ router.post('/verify-payment', async (req, res) => {
       }
     }
     
-    // If already paid, just return success
     if (ticket.paymentStatus === 'paid') {
       console.log(`✅ Ticket ${ticket.ticketId} already paid`);
       return res.json({
@@ -214,29 +280,26 @@ router.post('/verify-payment', async (req, res) => {
           ticketId: ticket.ticketId,
           name: ticket.name,
           email: ticket.email,
-          price: 8000
+          ticketType: ticket.ticketType,
+          price: ticket.price
         }
       });
     }
     
-    // Verify with Paystack
     const verification = await verifyPayment(reference);
     
     if (verification.data.status === 'success') {
-      // Generate QR code
       const generateQRCode = require('../utils/qrGenerator');
       const sendTicketEmail = require('../utils/emailResend');
       
       const qrResult = await generateQRCode(ticket);
       
-      // Update ticket
       ticket.paymentStatus = 'paid';
       ticket.paidAt = new Date();
       ticket.qrCode = qrResult.qrCode;
       ticket.qrCodeData = qrResult.qrData;
       await ticket.save();
       
-      // Send email with Resend
       console.log(`📧 Sending email via Resend to ${ticket.email}...`);
       sendTicketEmail(ticket, qrResult.qrCode)
         .then(success => {
@@ -250,12 +313,10 @@ router.post('/verify-payment', async (req, res) => {
           console.log('Email sending error:', err.message);
         });
       
-      // Update event count
       const event = await Event.getEvent();
-      event.firstBatch.sold += 1;
-      await event.save();
+      await event.incrementSold(ticket.ticketType);
       
-      console.log(`✅ Ticket ${ticket.ticketId} verified and completed`);
+      console.log(`✅ Ticket ${ticket.ticketId} (${ticket.ticketType}) verified and completed`);
       
       res.json({
         success: true,
@@ -264,7 +325,8 @@ router.post('/verify-payment', async (req, res) => {
           ticketId: ticket.ticketId,
           name: ticket.name,
           email: ticket.email,
-          price: 8000
+          ticketType: ticket.ticketType,
+          price: ticket.price
         }
       });
     } else {
@@ -286,12 +348,12 @@ router.post('/verify-payment', async (req, res) => {
 // Check ticket by email
 router.get('/check/:email', async (req, res) => {
   try {
-    const ticket = await Ticket.findOne({ 
+    const tickets = await Ticket.find({ 
       email: req.params.email.toLowerCase(),
       paymentStatus: 'paid'
     });
     
-    if (!ticket) {
+    if (!tickets || tickets.length === 0) {
       return res.json({
         success: true,
         hasTicket: false,
@@ -302,11 +364,14 @@ router.get('/check/:email', async (req, res) => {
     res.json({
       success: true,
       hasTicket: true,
-      data: {
-        ticketId: ticket.ticketId,
-        name: ticket.name,
-        scanned: ticket.scanned
-      }
+      count: tickets.length,
+      data: tickets.map(t => ({
+        ticketId: t.ticketId,
+        name: t.name,
+        ticketType: t.ticketType,
+        scanned: t.scanned,
+        scannedAt: t.scannedAt
+      }))
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
