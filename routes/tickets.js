@@ -97,11 +97,20 @@ router.post('/purchase', async (req, res) => {
     await ticket.save();
     console.log(`🎫 Ticket created: ${ticket.ticketId} for ${email}`);
     
-    // Initialize Paystack payment
-    const payment = await initializePayment(email, event.firstBatch.price, {
+    // ===== FEE ADDED HERE =====
+    const ticketPrice = event.firstBatch.price; // 8000
+    const checkoutFee = 300;
+    const totalAmount = ticketPrice + checkoutFee; // 8300
+    
+    console.log(`💰 Amount breakdown: Ticket ₦${ticketPrice} + Fee ₦${checkoutFee} = Total ₦${totalAmount}`);
+    
+    // Initialize Paystack payment with TOTAL amount (includes fee)
+    const payment = await initializePayment(email, totalAmount, {
       ticketId: ticket.ticketId,
       name: name,
-      phone: phone
+      phone: phone,
+      ticketPrice: ticketPrice,
+      checkoutFee: checkoutFee
     });
     
     if (payment.status) {
@@ -129,7 +138,9 @@ router.post('/purchase', async (req, res) => {
         data: {
           ticketId: ticket.ticketId,
           authorization_url: payment.data.authorization_url,
-          reference: paystackReference
+          reference: paystackReference,
+          // Frontend still shows 8000
+          displayPrice: ticketPrice
         }
       });
     } else {
@@ -214,7 +225,7 @@ router.post('/verify-payment', async (req, res) => {
     if (verification.data.status === 'success') {
       // Generate QR code
       const generateQRCode = require('../utils/qrGenerator');
-      const sendTicketEmail = require('../utils/emailResend'); // FIXED: Changed to Resend
+      const sendTicketEmail = require('../utils/emailResend');
       
       const qrResult = await generateQRCode(ticket);
       
@@ -225,7 +236,7 @@ router.post('/verify-payment', async (req, res) => {
       ticket.qrCodeData = qrResult.qrData;
       await ticket.save();
       
-      // Send email with Resend (don't wait for it)
+      // Send email with Resend
       console.log(`📧 Sending email via Resend to ${ticket.email}...`);
       sendTicketEmail(ticket, qrResult.qrCode)
         .then(success => {
