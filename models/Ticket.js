@@ -16,21 +16,21 @@ const ticketSchema = new mongoose.Schema({
     unique: true,
     required: true
   },
-  // NEW: For bulk purchases - same for all tickets in one order
+  // For bulk purchases - same for all tickets in one order
   bulkOrderId: {
     type: String,
     index: true
   },
-  // NEW: How many tickets in this purchase (total)
+  // How many tickets in this purchase (total)
   quantity: {
     type: Number,
     default: 1
   },
-  // Track which ticket type was purchased
+  // Track which ticket type was purchased - UPDATED with WINNERS FC
   ticketType: {
     type: String,
     required: true,
-    enum: ['FAST FAST', 'REGULAR', 'VIP', 'EARLY BIRD']
+    enum: ['FAST FAST', 'WINNERS FC', 'REGULAR', 'VIP', 'EARLY BIRD']
   },
   price: {
     type: Number,
@@ -69,7 +69,7 @@ ticketSchema.index({ email: 1, paymentStatus: 1 });
 ticketSchema.index({ ticketId: 1 });
 ticketSchema.index({ paymentReference: 1 });
 ticketSchema.index({ ticketType: 1 });
-ticketSchema.index({ bulkOrderId: 1 }); // NEW: Index for bulk lookups
+ticketSchema.index({ bulkOrderId: 1 });
 
 // Generate unique ticket ID before saving
 ticketSchema.pre('save', async function(next) {
