@@ -20,7 +20,7 @@ const sendTicketEmailResend = async (ticket, qrCode) => {
     const base64Data = qrCode.replace(/^data:image\/png;base64,/, '');
     
     const { data, error } = await resend.emails.send({
-      from: 'FTC March Madness <onboarding@resend.dev>', // Resend default domain for testing
+      from: 'FTC March Madness <noreply@ftcmarch.com.ng>', // Resend default domain for testing
       to: [ticket.email],
       subject: '🎫 YOUR TICKET - FTC MARCH MADNESS',
       html: `
