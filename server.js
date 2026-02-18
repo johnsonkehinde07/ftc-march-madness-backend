@@ -16,11 +16,10 @@ app.use(cors({
   credentials: true
 }));
 
-// THESE TWO LINES ARE CRITICAL - THEY WERE MISSING!
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// MongoDB Connection - USING .ENV VARIABLE
+// MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI;
 
 console.log('🔄 Connecting to MongoDB...');
@@ -37,11 +36,22 @@ mongoose.connect(MONGODB_URI, {
   .then(() => {
     console.log('✅ MongoDB Connected Successfully');
     
-    // Initialize event
+    // Initialize event and display ticket info
     Event.getEvent().then(event => {
       console.log(`📅 Event: ${event.name}`);
-      console.log(`💰 Price: ₦${event.firstBatch.price}`);
-      console.log(`🎟️ Tickets: ${event.firstBatch.sold}/${event.firstBatch.limit}`);
+      
+      // Display the first active ticket type (e.g., "FAST FAST")
+      if (event.ticketTypes && event.ticketTypes.length > 0) {
+        const firstTicket = event.ticketTypes.find(t => t.isActive) || event.ticketTypes[0];
+        if (firstTicket) {
+          console.log(`💰 Ticket: ${firstTicket.name} - ₦${firstTicket.price}`);
+          console.log(`🎟️ Sold: ${firstTicket.sold}/${firstTicket.limit}`);
+        } else {
+          console.log(`ℹ️ No active ticket types found.`);
+        }
+      } else {
+        console.log(`ℹ️ No ticket types configured yet.`);
+      }
     });
   })
   .catch(err => {
@@ -53,11 +63,7 @@ app.use('/api/tickets', require('./routes/tickets'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/validate', require('./routes/validate'));
 app.use('/api/webhook', require('./routes/webhook'));
-app.use('/api/webhook', require('./routes/tickets'));
-app.use('/api/webhook', require('./routes/webhook'));
-// Routes
-app.use('/api/tickets', require('./routes/tickets'));
-app.use('/api/webhook', require('./routes/webhook'));
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -73,7 +79,8 @@ app.get('/', (req, res) => {
     message: '🔥 FTC MARCH MADNESS API',
     endpoints: {
       health: 'GET /api/health',
-      availability: 'GET /api/tickets/availability',
+      types: 'GET /api/tickets/types',
+      availability: 'GET /api/tickets/availability/:type?',
       purchase: 'POST /api/tickets/purchase',
       check: 'GET /api/tickets/check/:email',
       validate: 'POST /api/validate',
