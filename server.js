@@ -11,11 +11,13 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:5500',
-    'https://ftc-march-madness.netlify.app'
+    'https://ftcmarch.com.ng',
+    'http://ftcmarch.com.ng',
+    'https://www.ftcmarch.com.ng',
+    'http://www.ftcmarch.com.ng'
   ],
   credentials: true
 }));
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
