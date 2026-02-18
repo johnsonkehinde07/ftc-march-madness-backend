@@ -11,7 +11,7 @@ const initializePayment = async (email, amount, metadata) => {
       email: email,
       amount: amount * 100,
       metadata: metadata,
-      callback_url: 'https://ftc-march-madness.netlify.app/payment-callback.html'
+      callback_url: 'https://ftcmarch.com.ng/payment-callback.html'
     }, {
       headers: {
         Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
@@ -73,7 +73,7 @@ router.get('/availability/:type?', async (req, res) => {
     const { type } = req.params;
     
     if (type) {
-      const ticketType = event.getTicketType(type);
+      const ticketType = event.ticketTypes.find(t => t.name === type && t.isActive);
       if (!ticketType) {
         return res.status(404).json({ 
           success: false, 
@@ -92,7 +92,6 @@ router.get('/availability/:type?', async (req, res) => {
         }
       });
     } else {
-      // Return all types
       const allTypes = event.ticketTypes.map(t => ({
         name: t.name,
         price: t.price,
@@ -112,17 +111,26 @@ router.get('/availability/:type?', async (req, res) => {
   }
 });
 
-// Initialize ticket purchase (redirect to Paystack)
+// Initialize ticket purchase with quantity support
 router.post('/purchase', async (req, res) => {
   try {
-    const { name, email, phone, ticketType } = req.body;
+    const { name, email, phone, ticketType, quantity } = req.body;
     
-    console.log('📝 Purchase request received:', { name, email, phone, ticketType });
+    console.log('📝 Purchase request received:', { name, email, phone, ticketType, quantity });
     
     if (!name || !email || !ticketType) {
       return res.status(400).json({ 
         success: false, 
         message: 'Name, email and ticket type are required' 
+      });
+    }
+    
+    // Validate quantity
+    const ticketQuantity = quantity || 1;
+    if (ticketQuantity < 1 || ticketQuantity > 10) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Quantity must be between 1 and 10' 
       });
     }
     
@@ -140,42 +148,53 @@ router.post('/purchase', async (req, res) => {
       });
     }
     
-    // Check availability
-    if (selectedType.sold >= selectedType.limit) {
+    // Check availability for quantity
+    if (selectedType.sold + ticketQuantity > selectedType.limit) {
       return res.status(400).json({ 
         success: false, 
-        message: `${selectedType.name} tickets are sold out` 
+        message: `Only ${selectedType.limit - selectedType.sold} tickets left` 
       });
     }
     
-    // Create ticket with pending status
-    const ticket = new Ticket({
+    // Generate bulk order ID (same for all tickets in this purchase)
+    const bulkOrderId = 'BULK' + Date.now() + Math.floor(Math.random() * 10000);
+    
+    // Create multiple tickets
+    const tickets = [];
+    for (let i = 0; i < ticketQuantity; i++) {
+      const ticket = new Ticket({
+        name,
+        email,
+        phone,
+        ticketType: selectedType.name,
+        price: selectedType.price,
+        ticketId: 'FTC' + Date.now() + Math.floor(Math.random() * 10000) + i,
+        paymentStatus: 'pending',
+        bulkOrderId,
+        quantity: ticketQuantity
+      });
+      tickets.push(ticket);
+    }
+    
+    // Save all tickets
+    await Ticket.insertMany(tickets);
+    console.log(`🎫 Created ${ticketQuantity} tickets for ${email} (${selectedType.name})`);
+    
+    // Calculate total with fee
+    const checkoutFee = 300;
+    const totalAmount = (selectedType.price * ticketQuantity) + checkoutFee;
+    
+    console.log(`💰 Amount: ${ticketQuantity} x ₦${selectedType.price} + ₦${checkoutFee} fee = ₦${totalAmount}`);
+    
+    // Initialize Paystack payment with metadata containing bulk info
+    const payment = await initializePayment(email, totalAmount, {
+      bulkOrderId,
       name,
-      email,
       phone,
       ticketType: selectedType.name,
-      price: selectedType.price,
-      ticketId: 'FTC' + Date.now() + Math.floor(Math.random() * 1000),
-      paymentStatus: 'pending'
-    });
-    
-    await ticket.save();
-    console.log(`🎫 Ticket created: ${ticket.ticketId} for ${email} (${selectedType.name})`);
-    
-    // Add checkout fee (₦300)
-    const checkoutFee = 300;
-    const totalAmount = selectedType.price + checkoutFee;
-    
-    console.log(`💰 Amount breakdown: ${selectedType.name} ₦${selectedType.price} + Fee ₦${checkoutFee} = Total ₦${totalAmount}`);
-    
-    // Initialize Paystack payment
-    const payment = await initializePayment(email, totalAmount, {
-      ticketId: ticket.ticketId,
-      name: name,
-      phone: phone,
-      ticketType: selectedType.name,
-      ticketPrice: selectedType.price,
-      checkoutFee: checkoutFee
+      quantity: ticketQuantity,
+      unitPrice: selectedType.price,
+      checkoutFee
     });
     
     if (payment.status) {
@@ -188,19 +207,20 @@ router.post('/purchase', async (req, res) => {
       
       console.log(`💰 Paystack reference: ${paystackReference}`);
       
-      ticket.paymentReference = paystackReference;
-      await ticket.save();
-      
-      const verifyTicket = await Ticket.findById(ticket._id);
-      console.log(`✅ Payment reference saved: ${verifyTicket.paymentReference} for ticket ${verifyTicket.ticketId}`);
+      // Update all tickets with payment reference
+      await Ticket.updateMany(
+        { bulkOrderId },
+        { $set: { paymentReference: paystackReference } }
+      );
       
       res.json({
         success: true,
         message: 'Redirect to payment',
         data: {
-          ticketId: ticket.ticketId,
-          ticketType: selectedType.name,
-          displayPrice: selectedType.price,
+          bulkOrderId,
+          quantity: ticketQuantity,
+          unitPrice: selectedType.price,
+          totalAmount,
           authorization_url: payment.data.authorization_url,
           reference: paystackReference
         }
@@ -218,7 +238,7 @@ router.post('/purchase', async (req, res) => {
   }
 });
 
-// Verify payment after Paystack redirect
+// Verify payment after Paystack redirect (updated for bulk)
 router.post('/verify-payment', async (req, res) => {
   try {
     const { reference } = req.body;
@@ -232,101 +252,99 @@ router.post('/verify-payment', async (req, res) => {
     
     console.log(`🔍 Verifying payment: ${reference}`);
     
-    // Find ticket by reference
-    let ticket = await Ticket.findOne({ paymentReference: reference });
+    // Find all tickets with this payment reference
+    let tickets = await Ticket.find({ paymentReference: reference });
     
-    if (!ticket) {
-      console.log(`❌ No ticket found for reference: ${reference}`);
+    if (!tickets || tickets.length === 0) {
+      console.log(`❌ No tickets found for reference: ${reference}`);
       
+      // Try fallback by checking Paystack
       const verification = await verifyPayment(reference).catch(() => null);
       if (verification && verification.data) {
-        const customerEmail = verification.data.customer?.email;
         const metadata = verification.data.metadata || {};
-        
-        if (metadata.ticketId) {
-          ticket = await Ticket.findOne({ ticketId: metadata.ticketId });
-        }
-        
-        if (!ticket && customerEmail) {
-          console.log(`🔍 Looking for recent tickets with email: ${customerEmail}`);
-          const recentTicket = await Ticket.findOne({ 
-            email: customerEmail,
-            paymentStatus: 'pending'
-          }).sort({ createdAt: -1 });
-          
-          if (recentTicket) {
-            console.log(`✅ Found recent ticket: ${recentTicket.ticketId}`);
-            ticket = recentTicket;
-            ticket.paymentReference = reference;
-            await ticket.save();
-          }
+        if (metadata.bulkOrderId) {
+          tickets = await Ticket.find({ bulkOrderId: metadata.bulkOrderId });
         }
       }
       
-      if (!ticket) {
+      if (!tickets || tickets.length === 0) {
         return res.status(404).json({ 
           success: false, 
-          message: 'Ticket not found' 
+          message: 'Tickets not found' 
         });
       }
     }
     
-    if (ticket.paymentStatus === 'paid') {
-      console.log(`✅ Ticket ${ticket.ticketId} already paid`);
+    // Check if already paid
+    if (tickets[0].paymentStatus === 'paid') {
+      console.log(`✅ Tickets already paid`);
       return res.json({
         success: true,
         message: 'Payment already verified',
         data: {
-          ticketId: ticket.ticketId,
-          name: ticket.name,
-          email: ticket.email,
-          ticketType: ticket.ticketType,
-          price: ticket.price
+          count: tickets.length,
+          tickets: tickets.map(t => ({
+            ticketId: t.ticketId,
+            name: t.name,
+            ticketType: t.ticketType
+          }))
         }
       });
     }
     
+    // Verify with Paystack
     const verification = await verifyPayment(reference);
     
     if (verification.data.status === 'success') {
       const generateQRCode = require('../utils/qrGenerator');
       const sendTicketEmail = require('../utils/emailResend');
       
-      const qrResult = await generateQRCode(ticket);
+      // Process each ticket
+      const completedTickets = [];
+      for (const ticket of tickets) {
+        // Generate QR code
+        const qrResult = await generateQRCode(ticket);
+        
+        // Update ticket
+        ticket.paymentStatus = 'paid';
+        ticket.paidAt = new Date();
+        ticket.qrCode = qrResult.qrCode;
+        ticket.qrCodeData = qrResult.qrData;
+        await ticket.save();
+        completedTickets.push(ticket);
+        
+        console.log(`✅ Ticket ${ticket.ticketId} completed`);
+      }
       
-      ticket.paymentStatus = 'paid';
-      ticket.paidAt = new Date();
-      ticket.qrCode = qrResult.qrCode;
-      ticket.qrCodeData = qrResult.qrData;
-      await ticket.save();
+      // Send single email with all tickets
+      console.log(`📧 Sending email with ${completedTickets.length} tickets to ${tickets[0].email}...`);
       
-      console.log(`📧 Sending email via Resend to ${ticket.email}...`);
-      sendTicketEmail(ticket, qrResult.qrCode)
-        .then(success => {
-          if (success) {
-            console.log(`✅ Email sent successfully to ${ticket.email}`);
-          } else {
-            console.log(`❌ Email failed to send to ${ticket.email}`);
-          }
-        })
-        .catch(err => {
-          console.log('Email sending error:', err.message);
-        });
-      
+      // Update event count
       const event = await Event.getEvent();
-      await event.incrementSold(ticket.ticketType);
+      const ticketType = event.ticketTypes.find(t => t.name === tickets[0].ticketType);
+      if (ticketType) {
+        ticketType.sold += tickets.length;
+        await event.save();
+      }
       
-      console.log(`✅ Ticket ${ticket.ticketId} (${ticket.ticketType}) verified and completed`);
+      // Send email with all tickets
+      try {
+        await sendTicketEmail(completedTickets, tickets[0]);
+        console.log(`✅ Email sent successfully to ${tickets[0].email}`);
+      } catch (emailError) {
+        console.log(`⚠️ Email sending failed but tickets are paid:`, emailError.message);
+      }
       
       res.json({
         success: true,
         message: 'Payment verified successfully',
         data: {
-          ticketId: ticket.ticketId,
-          name: ticket.name,
-          email: ticket.email,
-          ticketType: ticket.ticketType,
-          price: ticket.price
+          count: completedTickets.length,
+          tickets: completedTickets.map(t => ({
+            ticketId: t.ticketId,
+            name: t.name,
+            ticketType: t.ticketType
+          }))
         }
       });
     } else {

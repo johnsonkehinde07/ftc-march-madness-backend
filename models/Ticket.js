@@ -16,7 +16,17 @@ const ticketSchema = new mongoose.Schema({
     unique: true,
     required: true
   },
-  // NEW: Track which ticket type was purchased
+  // NEW: For bulk purchases - same for all tickets in one order
+  bulkOrderId: {
+    type: String,
+    index: true
+  },
+  // NEW: How many tickets in this purchase (total)
+  quantity: {
+    type: Number,
+    default: 1
+  },
+  // Track which ticket type was purchased
   ticketType: {
     type: String,
     required: true,
@@ -59,6 +69,7 @@ ticketSchema.index({ email: 1, paymentStatus: 1 });
 ticketSchema.index({ ticketId: 1 });
 ticketSchema.index({ paymentReference: 1 });
 ticketSchema.index({ ticketType: 1 });
+ticketSchema.index({ bulkOrderId: 1 }); // NEW: Index for bulk lookups
 
 // Generate unique ticket ID before saving
 ticketSchema.pre('save', async function(next) {
