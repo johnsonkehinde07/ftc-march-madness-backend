@@ -6,33 +6,53 @@ const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Updated to handle multiple tickets
+// Updated to handle multiple tickets with proper error handling
 const sendTicketEmailResend = async (tickets, primaryTicket) => {
   try {
-    const email = primaryTicket.email;
-    const name = primaryTicket.name;
+    // Handle case where a single ticket is passed instead of array
+    if (!Array.isArray(tickets)) {
+      tickets = [tickets];
+      primaryTicket = primaryTicket || tickets[0];
+    }
+    
+    // Safely get email and name
+    const email = primaryTicket?.email || tickets[0]?.email;
+    const name = primaryTicket?.name || tickets[0]?.name || 'Valued Customer';
+    
+    if (!email) {
+      console.error('❌ No email address found for ticket');
+      return false;
+    }
     
     console.log(`📧 Sending email with ${tickets.length} ticket(s) to ${email}...`);
     
-    // Calculate total
-    const subtotal = tickets.reduce((sum, t) => sum + t.price, 0);
+    // Calculate total safely
+    const subtotal = tickets.reduce((sum, t) => sum + (t.price || 8000), 0);
     const total = subtotal + 300; // Add fee
     
     // Generate HTML for all tickets
     let ticketsHtml = '';
     tickets.forEach((ticket, index) => {
-      // Extract base64 data for each QR code
-      const base64Data = ticket.qrCode.replace(/^data:image\/png;base64,/, '');
+      // Safely get values with defaults
+      const ticketId = ticket.ticketId || 'N/A';
+      const ticketType = ticket.ticketType || 'WINNERS FC';
+      const ticketPrice = ticket.price || 8000;
+      const qrCode = ticket.qrCode || '';
+      
+      // Extract base64 data for QR code if exists
+      const base64Data = qrCode ? qrCode.replace(/^data:image\/png;base64,/, '') : '';
       
       ticketsHtml += `
         <div style="margin-bottom: 30px; padding: 20px; border: 2px solid #8B1E1E; background: rgba(139,30,30,0.1);">
           <h3 style="color: #C69C6D; margin-top: 0; margin-bottom: 15px; font-size: 1.3rem;">🎟️ Ticket ${index + 1} of ${tickets.length}</h3>
-          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">TICKET ID:</strong> <span style="color: #F5E6D3;">${ticket.ticketId}</span></p>
-          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">TYPE:</strong> <span style="color: #F5E6D3;">${ticket.ticketType}</span></p>
-          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">PRICE:</strong> <span style="color: #F5E6D3;">₦${ticket.price.toLocaleString()}</span></p>
+          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">TICKET ID:</strong> <span style="color: #F5E6D3;">${ticketId}</span></p>
+          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">TYPE:</strong> <span style="color: #F5E6D3;">${ticketType}</span></p>
+          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">PRICE:</strong> <span style="color: #F5E6D3;">₦${ticketPrice.toLocaleString()}</span></p>
+          ${qrCode ? `
           <div style="text-align: center; margin-top: 15px;">
-            <img src="${ticket.qrCode}" alt="QR Code" style="width: 200px; border: 3px solid #C69C6D; padding: 5px; background: white;">
+            <img src="${qrCode}" alt="QR Code" style="width: 200px; border: 3px solid #C69C6D; padding: 5px; background: white;">
           </div>
+          ` : '<p style="color: #8B1E1E; text-align: center;">QR Code pending</p>'}
         </div>
       `;
     });
