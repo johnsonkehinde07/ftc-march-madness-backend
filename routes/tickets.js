@@ -238,7 +238,7 @@ router.post('/purchase', async (req, res) => {
   }
 });
 
-// Verify payment after Paystack redirect (updated for bulk)
+// Verify payment after Paystack redirect (updated for bulk with FIXED ticket count)
 router.post('/verify-payment', async (req, res) => {
   try {
     const { reference } = req.body;
@@ -319,13 +319,24 @@ router.post('/verify-payment', async (req, res) => {
       // Send single email with all tickets
       console.log(`📧 Sending email with ${completedTickets.length} tickets to ${tickets[0].email}...`);
       
-      // Update event count
+      // ===== FIXED: Update event count using actual paid tickets =====
       const event = await Event.getEvent();
       const ticketType = event.ticketTypes.find(t => t.name === tickets[0].ticketType);
+      
       if (ticketType) {
-        ticketType.sold += tickets.length;
+        // Count ALL paid tickets of this type (not just this batch)
+        const totalPaidForType = await Ticket.countDocuments({ 
+          ticketType: tickets[0].ticketType, 
+          paymentStatus: 'paid' 
+        });
+        
+        ticketType.sold = totalPaidForType;
         await event.save();
+        console.log(`✅ Updated ${tickets[0].ticketType} sold count to ${totalPaidForType}`);
+      } else {
+        console.log(`⚠️ Ticket type ${tickets[0].ticketType} not found in event`);
       }
+      // ===== END FIX =====
       
       // Send email with all tickets
       try {
