@@ -11,8 +11,7 @@ const initializePayment = async (email, amount, metadata) => {
       email: email,
       amount: amount * 100,
       metadata: metadata,
-      callback_url: 'https://ftcmarch.com.ng/payment-callback.html'
-    }, {
+     callback_url: 'https://ftcmarch.com.ng/payment-callback.html', // Changed from netlify.app{
       headers: {
         Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
         'Content-Type': 'application/json'
