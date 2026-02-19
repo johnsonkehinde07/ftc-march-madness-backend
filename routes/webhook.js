@@ -3,7 +3,7 @@ const router = express.Router();
 const Ticket = require('../models/Ticket');
 const Event = require('../models/Event');
 const generateQRCode = require('../utils/qrGenerator');
-const sendTicketEmailResend = require('../utils/emailResend');
+const sendTicketEmail = require('../utils/emailResend');
 
 // Paystack webhook endpoint
 router.post('/paystack-webhook', async (req, res) => {
@@ -19,39 +19,16 @@ router.post('/paystack-webhook', async (req, res) => {
       const customerEmail = webhookEvent.data.customer?.email;
       
       console.log(`🔍 Webhook processing reference: ${reference}`);
-      console.log('Customer email:', customerEmail);
       
-      // Try multiple ways to find the ticket
-      let ticket = null;
+      // Find ticket by reference
+      let ticket = await Ticket.findOne({ paymentReference: reference });
       
-      // Method 1: Find by payment reference
-      ticket = await Ticket.findOne({ paymentReference: reference });
-      if (ticket) console.log('✅ Found by paymentReference');
-      
-      // Method 2: Find by ticketId from metadata
-      if (!ticket && metadata.ticketId) {
-        console.log(`🔍 Trying ticketId: ${metadata.ticketId}`);
-        ticket = await Ticket.findOne({ ticketId: metadata.ticketId });
-        if (ticket) {
-          console.log('✅ Found by metadata.ticketId');
-          ticket.paymentReference = reference;
-          await ticket.save();
-        }
-      }
-      
-      // Method 3: Find by email (most recent pending)
-      if (!ticket && customerEmail) {
-        console.log(`🔍 Looking for recent pending tickets with email: ${customerEmail}`);
-        const recentTickets = await Ticket.find({ 
-          email: customerEmail,
-          paymentStatus: 'pending'
-        }).sort({ createdAt: -1 }).limit(1);
-        
-        if (recentTickets.length > 0) {
-          ticket = recentTickets[0];
-          console.log(`✅ Found by email: ${ticket.ticketId}`);
-          ticket.paymentReference = reference;
-          await ticket.save();
+      if (!ticket && metadata.bulkOrderId) {
+        console.log(`🔍 Looking for tickets with bulkOrderId: ${metadata.bulkOrderId}`);
+        const tickets = await Ticket.find({ bulkOrderId: metadata.bulkOrderId });
+        if (tickets && tickets.length > 0) {
+          ticket = tickets[0];
+          console.log(`✅ Found ${tickets.length} tickets via bulkOrderId`);
         }
       }
       
@@ -60,48 +37,76 @@ router.post('/paystack-webhook', async (req, res) => {
         return res.sendStatus(200);
       }
       
-      console.log(`✅ Ticket found: ${ticket.ticketId} (Status: ${ticket.paymentStatus})`);
+      // Find ALL tickets in this bulk order
+      const tickets = await Ticket.find({ 
+        $or: [
+          { paymentReference: reference },
+          { bulkOrderId: ticket.bulkOrderId }
+        ]
+      });
       
-      // Check if already processed
-      if (ticket.paymentStatus === 'paid') {
-        console.log('⚠️ Ticket already paid');
-        return res.sendStatus(200);
+      console.log(`✅ Found ${tickets.length} tickets to process`);
+      
+      // Process each ticket
+      for (const t of tickets) {
+        if (t.paymentStatus === 'paid') continue;
+        
+        // Generate QR code if not exists
+        if (!t.qrCode) {
+          console.log(`🔄 Generating QR for ticket ${t.ticketId}...`);
+          const qrResult = await generateQRCode(t);
+          t.qrCode = qrResult.qrCode;
+          t.qrCodeData = qrResult.qrData;
+        }
+        
+        t.paymentStatus = 'paid';
+        t.paidAt = new Date();
+        await t.save();
+        console.log(`✅ Ticket ${t.ticketId} marked as paid`);
       }
       
-      // Generate QR code
-      console.log('🔄 Generating QR code...');
-      const qrResult = await generateQRCode(ticket);
-      console.log('✅ QR code generated');
+      // ===== FIXED: Update event sold count with better error handling =====
+      try {
+        const event = await Event.getEvent();
+        console.log('Available ticket types:', event.ticketTypes.map(t => t.name));
+        
+        // Find the ticket type (case-insensitive match)
+        const ticketTypeName = tickets[0].ticketType;
+        const ticketType = event.ticketTypes.find(t => 
+          t.name.toLowerCase() === ticketTypeName?.toLowerCase()
+        );
+        
+        if (ticketType) {
+          // Count how many of this type are actually paid
+          const paidCount = await Ticket.countDocuments({ 
+            ticketType: ticketType.name, 
+            paymentStatus: 'paid' 
+          });
+          
+          // Update the sold count
+          ticketType.sold = paidCount;
+          await event.save();
+          console.log(`✅ Updated ${ticketType.name} sold count to ${paidCount}`);
+        } else {
+          console.log(`⚠️ Ticket type "${tickets[0].ticketType}" not found in event`);
+          // Log the available types for debugging
+          console.log('Available types:', event.ticketTypes.map(t => t.name));
+        }
+      } catch (eventError) {
+        console.error('❌ Error updating event count:', eventError.message);
+      }
+      // ===== END FIX =====
       
-      // Update ticket
-      ticket.paymentStatus = 'paid';
-      ticket.paidAt = new Date();
-      ticket.qrCode = qrResult.qrCode;
-      ticket.qrCodeData = qrResult.qrData;
-      await ticket.save();
-      console.log('✅ Ticket updated in database');
+      // Send single email with all tickets
+      console.log(`📧 Sending email with ${tickets.length} tickets to ${tickets[0].email}...`);
+      try {
+        await sendTicketEmail(tickets, tickets[0]);
+        console.log(`✅ Email sent successfully`);
+      } catch (emailError) {
+        console.log(`⚠️ Email sending failed:`, emailError.message);
+      }
       
-      // Send email with Resend (fire and forget)
-      console.log(`📧 Sending email via Resend to ${ticket.email}...`);
-      sendTicketEmailResend(ticket, qrResult.qrCode)
-        .then(success => {
-          if (success) {
-            console.log(`✅ Email sent successfully to ${ticket.email}`);
-          } else {
-            console.log(`❌ Email failed to send to ${ticket.email}`);
-          }
-        })
-        .catch(err => {
-          console.log('Email sending error:', err.message);
-        });
-      
-      // Update event count
-      const event = await Event.getEvent();
-      event.firstBatch.sold += 1;
-      await event.save();
-      console.log(`✅ Event count updated: ${event.firstBatch.sold}/${event.firstBatch.limit}`);
-      
-      console.log(`========== WEBHOOK COMPLETE for ${ticket.ticketId} ==========`);
+      console.log(`========== WEBHOOK COMPLETE ==========`);
     }
     
     res.sendStatus(200);
