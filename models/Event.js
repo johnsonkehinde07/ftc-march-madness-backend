@@ -13,13 +13,13 @@ const eventSchema = new mongoose.Schema({
     type: String,
     default: 'KODO BEACH HOUSE'
   },
-  // NEW: Multiple ticket types array
+  // Multiple ticket types array
   ticketTypes: [
     {
       name: { 
         type: String, 
         required: true,
-        enum: ['FAST FAST', 'REGULAR', 'VIP', 'EARLY BIRD'] // Add more as needed
+        enum: ['FAST FAST', 'WINNERS FC', 'REGULAR', 'VIP', 'EARLY BIRD'] // Added WINNERS FC
       },
       price: { 
         type: Number, 
