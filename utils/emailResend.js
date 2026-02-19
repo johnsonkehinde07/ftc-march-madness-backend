@@ -49,8 +49,13 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
           <p style="margin: 8px 0;"><strong style="color: #C69C6D;">TYPE:</strong> <span style="color: #F5E6D3;">${ticketType}</span></p>
           <p style="margin: 8px 0;"><strong style="color: #C69C6D;">PRICE:</strong> <span style="color: #F5E6D3;">₦${ticketPrice.toLocaleString()}</span></p>
           ${qrCode ? `
-          <div style="text-align: center; margin-top: 15px;">
-            <img src="${qrCode}" alt="QR Code" style="width: 200px; border: 3px solid #C69C6D; padding: 5px; background: white;">
+          <div style="text-align: center; margin-top: 15px; background: #ffffff; padding: 15px; border: 1px solid #C69C6D;">
+            <!-- QR Code as inline image with fallback text -->
+            <img src="${qrCode}" alt="QR Code for ticket ${ticketId}" style="width: 200px; height: 200px; border: 3px solid #C69C6D; padding: 5px; background: white; display: block; margin: 0 auto;">
+            <p style="color: #1A1212; margin-top: 10px; font-size: 0.9rem; background: #F5E6D3; padding: 8px;">
+              <strong>Ticket ID:</strong> ${ticketId}<br>
+              <span style="color: #8B1E1E;">Present this ID at the entrance if QR code doesn't load</span>
+            </p>
           </div>
           ` : '<p style="color: #8B1E1E; text-align: center;">QR Code pending</p>'}
         </div>
@@ -133,6 +138,20 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
             font-size: 12px;
             color: #DCC7B0;
           }
+          .fallback-link {
+            display: inline-block;
+            background: #8B1E1E;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border: 2px solid #C69C6D;
+            margin-top: 15px;
+            font-weight: bold;
+          }
+          .fallback-link:hover {
+            background: #C69C6D;
+            color: #1A1212;
+          }
         </style>
       </head>
       <body>
@@ -161,9 +180,17 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
           
           ${ticketsHtml}
           
+          <div style="text-align: center; margin: 30px 0;">
+            <p style="color: #F5E6D3;">Having trouble viewing the QR codes?</p>
+            <a href="https://ftcmarch.com.ng/tickets?email=${encodeURIComponent(email)}" class="fallback-link">
+              VIEW ALL YOUR TICKETS ONLINE
+            </a>
+          </div>
+          
           <div class="footer">
             <p>These tickets are unique and non-transferable.</p>
             <p>Present the QR codes at the entrance for scanning.</p>
+            <p>If QR codes don't load, provide your Ticket ID at the door.</p>
             <p>© 2026 FTC · MARCH MADNESS · ALL RIGHTS RESERVED</p>
           </div>
         </div>
