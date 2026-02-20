@@ -26,7 +26,7 @@ const ticketSchema = new mongoose.Schema({
     type: Number,
     default: 1
   },
-  // Track which ticket type was purchased - FIXED with RUNNER UP
+  // Track which ticket type was purchased
   ticketType: {
     type: String,
     required: true,
@@ -41,9 +41,10 @@ const ticketSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed', 'refunded'],
     default: 'pending'
   },
+  // FIXED: Removed unique constraint to allow multiple tickets with same payment reference
   paymentReference: {
     type: String,
-    unique: true,
+    index: true,  // Index for performance, but allows duplicates
     sparse: true
   },
   paidAt: Date,
@@ -66,8 +67,8 @@ const ticketSchema = new mongoose.Schema({
 
 // Indexes for performance
 ticketSchema.index({ email: 1, paymentStatus: 1 });
-ticketSchema.index({ ticketId: 1 });
-ticketSchema.index({ paymentReference: 1 });
+ticketSchema.index({ ticketId: 1 }, { unique: true });
+ticketSchema.index({ paymentReference: 1 }); // Index but not unique
 ticketSchema.index({ ticketType: 1 });
 ticketSchema.index({ bulkOrderId: 1 });
 
