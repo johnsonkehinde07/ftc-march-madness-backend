@@ -26,11 +26,11 @@ const ticketSchema = new mongoose.Schema({
     type: Number,
     default: 1
   },
-  // Track which ticket type was purchased - UPDATED with WINNERS FC
+  // Track which ticket type was purchased - FIXED with RUNNER UP
   ticketType: {
     type: String,
     required: true,
-    enum: ['FAST FAST', 'WINNERS FC', 'REGULAR', 'VIP', 'EARLY BIRD']
+    enum: ['FAST FAST', 'WINNERS FC', 'RUNNER UP', 'REGULAR', 'VIP', 'EARLY BIRD']
   },
   price: {
     type: Number,
