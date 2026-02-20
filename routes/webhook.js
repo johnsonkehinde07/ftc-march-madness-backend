@@ -12,13 +12,29 @@ router.post('/paystack-webhook', async (req, res) => {
     
     console.log('========== WEBHOOK RECEIVED ==========');
     console.log('Event:', webhookEvent.event);
+    console.log('Reference:', webhookEvent.data?.reference);
     
+    // Always acknowledge receipt immediately
+    res.sendStatus(200);
+    
+    // Process asynchronously after acknowledging
     if (webhookEvent.event === 'charge.success') {
       const reference = webhookEvent.data.reference;
       const metadata = webhookEvent.data.metadata || {};
       const customerEmail = webhookEvent.data.customer?.email;
       
       console.log(`🔍 Webhook processing reference: ${reference}`);
+      
+      // 🚨 IMPORTANT: Check for duplicate payment FIRST
+      const existingPaidTicket = await Ticket.findOne({ 
+        paymentReference: reference,
+        paymentStatus: 'paid' 
+      });
+      
+      if (existingPaidTicket) {
+        console.log(`⚠️ Duplicate webhook detected for reference ${reference} - already processed`);
+        return; // Exit silently, already processed
+      }
       
       // Find ticket by reference
       let ticket = await Ticket.findOne({ paymentReference: reference });
@@ -34,7 +50,7 @@ router.post('/paystack-webhook', async (req, res) => {
       
       if (!ticket) {
         console.log(`❌ No ticket found for reference: ${reference}`);
-        return res.sendStatus(200);
+        return;
       }
       
       // Find ALL tickets in this bulk order
@@ -61,11 +77,12 @@ router.post('/paystack-webhook', async (req, res) => {
         
         t.paymentStatus = 'paid';
         t.paidAt = new Date();
+        t.paymentReference = reference; // Ensure reference is set
         await t.save();
         console.log(`✅ Ticket ${t.ticketId} marked as paid`);
       }
       
-      // ===== FIXED: Update event sold count with better error handling =====
+      // Update event sold count with better error handling
       try {
         const event = await Event.getEvent();
         console.log('Available ticket types:', event.ticketTypes.map(t => t.name));
@@ -89,13 +106,11 @@ router.post('/paystack-webhook', async (req, res) => {
           console.log(`✅ Updated ${ticketType.name} sold count to ${paidCount}`);
         } else {
           console.log(`⚠️ Ticket type "${tickets[0].ticketType}" not found in event`);
-          // Log the available types for debugging
           console.log('Available types:', event.ticketTypes.map(t => t.name));
         }
       } catch (eventError) {
         console.error('❌ Error updating event count:', eventError.message);
       }
-      // ===== END FIX =====
       
       // Send single email with all tickets
       console.log(`📧 Sending email with ${tickets.length} tickets to ${tickets[0].email}...`);
@@ -109,10 +124,9 @@ router.post('/paystack-webhook', async (req, res) => {
       console.log(`========== WEBHOOK COMPLETE ==========`);
     }
     
-    res.sendStatus(200);
   } catch (error) {
     console.error('❌ Webhook Error:', error);
-    res.sendStatus(500);
+    // No need to send response here as we already sent 200
   }
 });
 
