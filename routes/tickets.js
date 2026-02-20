@@ -11,7 +11,7 @@ const initializePayment = async (email, amount, metadata) => {
       email: email,
       amount: amount * 100,
       metadata: metadata,
-      callback_url: 'https://ftcmarch.com.ng/payment-callback.html'
+      callback_url: 'https://ftc-march-madness.onrender.com/payment-callback.html' // UPDATED to Render URL
     }, {
       headers: {
         Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
@@ -319,7 +319,7 @@ router.post('/verify-payment', async (req, res) => {
       // Send single email with all tickets
       console.log(`📧 Sending email with ${completedTickets.length} tickets to ${tickets[0].email}...`);
       
-      // ===== FIXED: Update event count using actual paid tickets =====
+      // Update event count using actual paid tickets
       const event = await Event.getEvent();
       const ticketType = event.ticketTypes.find(t => t.name === tickets[0].ticketType);
       
@@ -336,7 +336,6 @@ router.post('/verify-payment', async (req, res) => {
       } else {
         console.log(`⚠️ Ticket type ${tickets[0].ticketType} not found in event`);
       }
-      // ===== END FIX =====
       
       // Send email with all tickets
       try {

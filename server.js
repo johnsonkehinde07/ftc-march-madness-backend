@@ -7,10 +7,11 @@ dotenv.config();
 
 const app = express();
 
-// Middleware
+// Middleware - UPDATED with Render frontend URL
 app.use(cors({
   origin: [
     'http://localhost:5500',
+    'https://ftc-march-madness.onrender.com',  // ADDED - Your new Render frontend
     'https://ftcmarch.com.ng',
     'http://ftcmarch.com.ng',
     'https://www.ftcmarch.com.ng',
@@ -42,7 +43,7 @@ mongoose.connect(MONGODB_URI, {
     Event.getEvent().then(event => {
       console.log(`📅 Event: ${event.name}`);
       
-      // Display the first active ticket type (e.g., "FAST FAST")
+      // Display the first active ticket type
       if (event.ticketTypes && event.ticketTypes.length > 0) {
         const firstTicket = event.ticketTypes.find(t => t.isActive) || event.ticketTypes[0];
         if (firstTicket) {
