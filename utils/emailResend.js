@@ -27,7 +27,7 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
     console.log(`📧 Sending email with ${tickets.length} ticket(s) to ${email}...`);
     
     // Calculate total safely
-    const subtotal = tickets.reduce((sum, t) => sum + (t.price || 8000), 0);
+    const subtotal = tickets.reduce((sum, t) => sum + (t.price || 8700), 0); // Updated default to 8700
     const total = subtotal + 300; // Add fee
     
     // Generate HTML for all tickets
@@ -35,8 +35,8 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
     tickets.forEach((ticket, index) => {
       // Safely get values with defaults
       const ticketId = ticket.ticketId || 'N/A';
-      const ticketType = ticket.ticketType || 'WINNERS FC';
-      const ticketPrice = ticket.price || 8000;
+      const ticketType = ticket.ticketType || 'RUNNER UP'; // Updated default
+      const ticketPrice = ticket.price || 8700; // Updated default
       const qrCode = ticket.qrCode || '';
       
       // Extract base64 data for QR code if exists
@@ -50,11 +50,12 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
           <p style="margin: 8px 0;"><strong style="color: #C69C6D;">PRICE:</strong> <span style="color: #F5E6D3;">₦${ticketPrice.toLocaleString()}</span></p>
           ${qrCode ? `
           <div style="text-align: center; margin-top: 15px; background: #ffffff; padding: 15px; border: 1px solid #C69C6D;">
-            <!-- QR Code as inline image with fallback text -->
-            <img src="${qrCode}" alt="QR Code for ticket ${ticketId}" style="width: 200px; height: 200px; border: 3px solid #C69C6D; padding: 5px; background: white; display: block; margin: 0 auto;">
-            <p style="color: #1A1212; margin-top: 10px; font-size: 0.9rem; background: #F5E6D3; padding: 8px;">
+            <!-- QR Code with explicit dimensions for Gmail -->
+            <img src="${qrCode}" alt="QR Code for ticket ${ticketId}" width="200" height="200" style="display: block; margin: 0 auto; max-width: 100%; height: auto; border: 3px solid #C69C6D; padding: 5px; background: white;">
+            <!-- Fallback text for Gmail -->
+            <p style="color: #1A1212; margin-top: 10px; font-size: 0.9rem; background: #F5E6D3; padding: 8px; border-radius: 0;">
               <strong>Ticket ID:</strong> ${ticketId}<br>
-              <span style="color: #8B1E1E;">Present this ID at the entrance if QR code doesn't load</span>
+              <span style="color: #8B1E1E; font-weight: bold;">⬇️ If QR doesn't load, use this ID at the gate ⬇️</span>
             </p>
           </div>
           ` : '<p style="color: #8B1E1E; text-align: center;">QR Code pending</p>'}
@@ -191,7 +192,7 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
             <p>These tickets are unique and non-transferable.</p>
             <p>Present the QR codes at the entrance for scanning.</p>
             <p>If QR codes don't load, provide your Ticket ID at the door.</p>
-            <p>© 2026 FTC · MARCH MADNESS · ALL RIGHTS RESERVED</p>
+            <p>©️ 2026 FTC · MARCH MADNESS · ALL RIGHTS RESERVED</p>
           </div>
         </div>
       </body>

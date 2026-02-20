@@ -11,7 +11,7 @@ const initializePayment = async (email, amount, metadata) => {
       email: email,
       amount: amount * 100,
       metadata: metadata,
-      callback_url: 'https://ftc-march-madness.onrender.com/payment-callback.html' // UPDATED to Render URL
+      callback_url: 'https://ftc-march-madness.onrender.com/payment-callback.html'
     }, {
       headers: {
         Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
@@ -238,7 +238,7 @@ router.post('/purchase', async (req, res) => {
   }
 });
 
-// Verify payment after Paystack redirect (updated for bulk with FIXED ticket count)
+// Verify payment after Paystack redirect
 router.post('/verify-payment', async (req, res) => {
   try {
     const { reference } = req.body;
