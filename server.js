@@ -7,17 +7,20 @@ dotenv.config();
 
 const app = express();
 
-// Middleware - UPDATED with Render frontend URL
+// Middleware - UPDATED with correct CORS for both frontend URLs
 app.use(cors({
   origin: [
     'http://localhost:5500',
-    'https://ftc-march-madness.onrender.com',  // ADDED - Your new Render frontend
+    'https://ftc-march-madness-frontend.onrender.com',  // Your actual frontend URL
+    'https://ftc-march-madness.onrender.com',
     'https://ftcmarch.com.ng',
     'http://ftcmarch.com.ng',
     'https://www.ftcmarch.com.ng',
     'http://www.ftcmarch.com.ng'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
