@@ -11,7 +11,7 @@ const initializePayment = async (email, amount, metadata) => {
       email: email,
       amount: amount * 100,
       metadata: metadata,
-      callback_url: 'https://ftc-march-madness.onrender.com/payment-callback.html'
+      callback_url: 'https://ftc-march-madness-frontend.onrender.com/payment-callback.html' // UPDATED
     }, {
       headers: {
         Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
