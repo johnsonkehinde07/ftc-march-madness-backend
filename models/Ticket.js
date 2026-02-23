@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 // Function to generate random short code
 const generateShortCode = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed confusing chars (0,1,I,O)
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
   for (let i = 0; i < 6; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
@@ -26,7 +26,7 @@ const ticketSchema = new mongoose.Schema({
     unique: true,
     required: true
   },
-  // NEW: Short code for easy manual entry at door
+  // Short code for easy manual entry at door
   shortCode: {
     type: String,
     unique: true,
@@ -45,11 +45,11 @@ const ticketSchema = new mongoose.Schema({
     type: Number,
     default: 1
   },
-  // Track which ticket type was purchased
+  // Track which ticket type was purchased - ADDED BRONZE
   ticketType: {
     type: String,
     required: true,
-    enum: ['FAST FAST', 'WINNERS FC', 'RUNNER UP', 'REGULAR', 'VIP', 'EARLY BIRD']
+    enum: ['FAST FAST', 'WINNERS FC', 'RUNNER UP', 'BRONZE', 'REGULAR', 'VIP', 'EARLY BIRD']
   },
   price: {
     type: Number,
@@ -60,10 +60,9 @@ const ticketSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'failed', 'refunded'],
     default: 'pending'
   },
-  // Removed unique constraint to allow multiple tickets with same payment reference
   paymentReference: {
     type: String,
-    index: true,  // Index for performance, but allows duplicates
+    index: true,
     sparse: true
   },
   paidAt: Date,
@@ -88,7 +87,7 @@ const ticketSchema = new mongoose.Schema({
 ticketSchema.index({ email: 1, paymentStatus: 1 });
 ticketSchema.index({ ticketId: 1 }, { unique: true });
 ticketSchema.index({ shortCode: 1 }, { unique: true, sparse: true });
-ticketSchema.index({ paymentReference: 1 }); // Index but not unique
+ticketSchema.index({ paymentReference: 1 });
 ticketSchema.index({ ticketType: 1 });
 ticketSchema.index({ bulkOrderId: 1 });
 
@@ -119,7 +118,7 @@ ticketSchema.pre('save', async function(next) {
       attempts++;
     }
     
-    // Fallback if all attempts fail (very unlikely)
+    // Fallback if all attempts fail
     if (!isUnique) {
       this.shortCode = 'CODE' + Date.now().toString().slice(-3);
     }
@@ -133,7 +132,7 @@ ticketSchema.virtual('formattedPrice').get(function() {
   return `₦${this.price.toLocaleString()}`;
 });
 
-// Virtual for short display (last 6 chars of ticket ID if no short code)
+// Virtual for display code
 ticketSchema.virtual('displayCode').get(function() {
   return this.shortCode || this.ticketId.slice(-6);
 });
