@@ -6,7 +6,7 @@ const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Updated to handle multiple tickets with proper error handling
+// Updated to handle multiple tickets with Gmail-friendly QR display
 const sendTicketEmailResend = async (tickets, primaryTicket) => {
   try {
     // Handle case where a single ticket is passed instead of array
@@ -27,38 +27,66 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
     console.log(`📧 Sending email with ${tickets.length} ticket(s) to ${email}...`);
     
     // Calculate total safely
-    const subtotal = tickets.reduce((sum, t) => sum + (t.price || 8700), 0); // Updated default to 8700
+    const subtotal = tickets.reduce((sum, t) => sum + (t.price || 8700), 0);
     const total = subtotal + 300; // Add fee
     
-    // Generate HTML for all tickets
+    // Generate HTML for all tickets with Gmail-friendly formatting
     let ticketsHtml = '';
     tickets.forEach((ticket, index) => {
       // Safely get values with defaults
       const ticketId = ticket.ticketId || 'N/A';
-      const ticketType = ticket.ticketType || 'RUNNER UP'; // Updated default
-      const ticketPrice = ticket.price || 8700; // Updated default
+      const ticketType = ticket.ticketType || 'RUNNER UP';
+      const ticketPrice = ticket.price || 8700;
       const qrCode = ticket.qrCode || '';
       
-      // Extract base64 data for QR code if exists
-      const base64Data = qrCode ? qrCode.replace(/^data:image\/png;base64,/, '') : '';
-      
       ticketsHtml += `
-        <div style="margin-bottom: 30px; padding: 20px; border: 2px solid #8B1E1E; background: rgba(139,30,30,0.1);">
-          <h3 style="color: #C69C6D; margin-top: 0; margin-bottom: 15px; font-size: 1.3rem;">🎟️ Ticket ${index + 1} of ${tickets.length}</h3>
-          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">TICKET ID:</strong> <span style="color: #F5E6D3;">${ticketId}</span></p>
-          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">TYPE:</strong> <span style="color: #F5E6D3;">${ticketType}</span></p>
-          <p style="margin: 8px 0;"><strong style="color: #C69C6D;">PRICE:</strong> <span style="color: #F5E6D3;">₦${ticketPrice.toLocaleString()}</span></p>
+        <div style="margin-bottom: 40px; padding: 20px; border: 2px solid #8B1E1E; background: rgba(139,30,30,0.1); font-family: Arial, Helvetica, sans-serif;">
+          <h3 style="color: #C69C6D; margin: 0 0 15px 0; font-size: 1.3rem;">🎟️ Ticket ${index + 1} of ${tickets.length}</h3>
+          
+          <!-- Ticket details in table format for better email client compatibility -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+            <tr>
+              <td style="padding: 8px 5px; color: #C69C6D; width: 100px; font-weight: bold;">TICKET ID:</td>
+              <td style="padding: 8px 5px; color: #F5E6D3; font-family: monospace; font-size: 14px;">${ticketId}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 5px; color: #C69C6D; font-weight: bold;">TYPE:</td>
+              <td style="padding: 8px 5px; color: #F5E6D3;">${ticketType}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 5px; color: #C69C6D; font-weight: bold;">PRICE:</td>
+              <td style="padding: 8px 5px; color: #F5E6D3;">₦${ticketPrice.toLocaleString()}</td>
+            </tr>
+          </table>
+          
+          <!-- QR CODE SECTION - Multiple fallbacks for Gmail -->
           ${qrCode ? `
-          <div style="text-align: center; margin-top: 15px; background: #ffffff; padding: 15px; border: 1px solid #C69C6D;">
-            <!-- QR Code with explicit dimensions for Gmail -->
-            <img src="${qrCode}" alt="QR Code for ticket ${ticketId}" width="200" height="200" style="display: block; margin: 0 auto; max-width: 100%; height: auto; border: 3px solid #C69C6D; padding: 5px; background: white;">
-            <!-- Fallback text for Gmail -->
-            <p style="color: #1A1212; margin-top: 10px; font-size: 0.9rem; background: #F5E6D3; padding: 8px; border-radius: 0;">
-              <strong>Ticket ID:</strong> ${ticketId}<br>
-              <span style="color: #8B1E1E; font-weight: bold;">⬇️ If QR doesn't load, use this ID at the gate ⬇️</span>
-            </p>
+          <div style="text-align: center; margin: 20px 0; background: #ffffff; padding: 20px; border: 2px solid #C69C6D;">
+            <p style="color: #1A1212; margin: 0 0 15px 0; font-weight: bold; font-size: 16px;">🔳 SCAN THIS QR CODE AT ENTRY</p>
+            
+            <!-- Method 1: Standard image (works in most clients) -->
+            <img src="${qrCode}" alt="QR Code for ticket ${ticketId}" width="200" height="200" style="display: block; margin: 0 auto; max-width: 100%; height: auto; border: 3px solid #C69C6D;">
+            
+            <!-- Method 2: Text fallback for Gmail (always works) -->
+            <div style="margin-top: 20px; padding: 15px; background: #1A1212; border: 2px solid #8B1E1E;">
+              <p style="color: #C69C6D; margin: 0 0 10px 0; font-weight: bold; font-size: 14px;">⬇️ TICKET ID (USE IF QR FAILS) ⬇️</p>
+              <p style="color: #F5E6D3; font-size: 18px; font-family: monospace; background: #333; padding: 10px; letter-spacing: 2px; border-radius: 4px;">
+                ${ticketId}
+              </p>
+              <p style="color: #DCC7B0; font-size: 12px; margin: 10px 0 0 0;">
+                Present this ID at the entrance if QR code doesn't scan
+              </p>
+            </div>
+            
+            <!-- Method 3: Direct link to view online -->
+            <div style="margin-top: 15px;">
+              <a href="https://ftc-march-madness-frontend.onrender.com/ticket.html?id=${ticketId}" 
+                 style="background: #8B1E1E; color: white; padding: 12px 25px; text-decoration: none; border: 2px solid #C69C6D; display: inline-block; font-weight: bold; font-size: 14px;">
+                 🔗 VIEW TICKET ONLINE
+              </a>
+            </div>
           </div>
-          ` : '<p style="color: #8B1E1E; text-align: center;">QR Code pending</p>'}
+          ` : '<p style="color: #8B1E1E; text-align: center; padding: 20px;">QR Code pending - please contact support</p>'}
         </div>
       `;
     });
@@ -70,88 +98,96 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body {
-            font-family: 'Inter', Arial, sans-serif;
-            background: #1A1212;
-            margin: 0;
-            padding: 20px;
+          body { 
+            font-family: Arial, Helvetica, sans-serif; 
+            background: #1A1212; 
+            margin: 0; 
+            padding: 20px; 
           }
-          .container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: #1A1212;
-            border: 3px solid #8B1E1E;
-            padding: 30px;
+          .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: #1A1212; 
+            border: 3px solid #8B1E1E; 
+            padding: 30px; 
           }
-          .header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #8B1E1E;
-            padding-bottom: 20px;
+          .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            border-bottom: 2px solid #8B1E1E; 
+            padding-bottom: 20px; 
           }
-          .ftc {
-            color: #C69C6D;
-            font-size: 32px;
-            font-weight: 900;
-            letter-spacing: 4px;
-            margin: 0;
+          .ftc { 
+            color: #C69C6D; 
+            font-size: 32px; 
+            font-weight: 900; 
+            letter-spacing: 4px; 
+            margin: 0; 
           }
-          .presents {
-            color: #F5E6D3;
-            font-style: italic;
-            margin: 5px 0;
+          .presents { 
+            color: #F5E6D3; 
+            font-style: italic; 
+            margin: 5px 0; 
+            font-size: 14px; 
           }
-          .event-name {
-            color: #F5E6D3;
-            font-size: 42px;
-            font-weight: 900;
-            text-transform: uppercase;
-            text-shadow: 3px 3px 0 #8B1E1E;
-            margin: 10px 0;
+          .event-name { 
+            color: #F5E6D3; 
+            font-size: 42px; 
+            font-weight: 900; 
+            text-transform: uppercase; 
+            text-shadow: 3px 3px 0 #8B1E1E; 
+            margin: 10px 0; 
           }
-          .buyer-info {
-            background: rgba(139,30,30,0.2);
-            border: 2px solid #8B1E1E;
-            padding: 15px;
-            margin-bottom: 30px;
-            text-align: center;
+          .buyer-info { 
+            background: rgba(139,30,30,0.2); 
+            border: 2px solid #8B1E1E; 
+            padding: 15px; 
+            margin-bottom: 30px; 
           }
-          .buyer-info p {
-            margin: 5px 0;
-            color: #F5E6D3;
+          .buyer-info p { 
+            margin: 8px 0; 
+            color: #F5E6D3; 
+            font-size: 14px; 
           }
-          .summary {
-            background: rgba(198,156,109,0.1);
-            border: 2px solid #C69C6D;
-            padding: 15px;
-            margin-bottom: 30px;
-            text-align: center;
+          .buyer-info strong { 
+            color: #C69C6D; 
+            width: 80px; 
+            display: inline-block; 
           }
-          .summary p {
-            margin: 5px 0;
-            color: #F5E6D3;
-            font-size: 1.1rem;
+          .summary { 
+            background: rgba(198,156,109,0.1); 
+            border: 2px solid #C69C6D; 
+            padding: 15px; 
+            margin-bottom: 30px; 
+            text-align: center; 
           }
-          .footer {
-            border-top: 2px solid #8B1E1E;
-            padding-top: 20px;
-            text-align: center;
-            font-size: 12px;
-            color: #DCC7B0;
+          .summary p { 
+            margin: 8px 0; 
+            color: #F5E6D3; 
+            font-size: 16px; 
           }
-          .fallback-link {
+          .summary .total { 
+            font-size: 24px; 
+            color: #C69C6D; 
+            font-weight: bold; 
+          }
+          .footer { 
+            border-top: 2px solid #8B1E1E; 
+            padding-top: 20px; 
+            text-align: center; 
+            font-size: 12px; 
+            color: #DCC7B0; 
+          }
+          .online-link {
             display: inline-block;
             background: #8B1E1E;
             color: white;
-            padding: 10px 20px;
+            padding: 15px 30px;
             text-decoration: none;
             border: 2px solid #C69C6D;
-            margin-top: 15px;
             font-weight: bold;
-          }
-          .fallback-link:hover {
-            background: #C69C6D;
-            color: #1A1212;
+            font-size: 16px;
+            margin: 10px 0;
           }
         </style>
       </head>
@@ -164,35 +200,35 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
           </div>
           
           <div class="buyer-info">
-            <p><strong style="color: #C69C6D;">NAME:</strong> ${name}</p>
-            <p><strong style="color: #C69C6D;">EMAIL:</strong> ${email}</p>
-            <p><strong style="color: #C69C6D;">DATE:</strong> MARCH 7, 2026</p>
-            <p><strong style="color: #C69C6D;">LOCATION:</strong> KODO BEACH HOUSE</p>
+            <p><strong>NAME:</strong> ${name}</p>
+            <p><strong>EMAIL:</strong> ${email}</p>
+            <p><strong>DATE:</strong> MARCH 7, 2026</p>
+            <p><strong>LOCATION:</strong> KODO BEACH HOUSE</p>
           </div>
           
           <div class="summary">
             <p><strong style="color: #C69C6D;">TOTAL TICKETS:</strong> ${tickets.length}</p>
             <p><strong style="color: #C69C6D;">SUBTOTAL:</strong> ₦${subtotal.toLocaleString()}</p>
             <p><strong style="color: #C69C6D;">FEE:</strong> ₦300</p>
-            <p><strong style="color: #C69C6D; font-size: 1.3rem;">TOTAL PAID:</strong> <span style="color: #C69C6D; font-size: 1.3rem;">₦${total.toLocaleString()}</span></p>
+            <p class="total">TOTAL PAID: ₦${total.toLocaleString()}</p>
           </div>
           
-          <h3 style="color: #C69C6D; text-align: center; margin: 30px 0 20px;">YOUR TICKETS</h3>
+          <h3 style="color: #C69C6D; text-align: center; margin: 30px 0 20px; font-size: 20px;">YOUR TICKETS</h3>
           
           ${ticketsHtml}
           
           <div style="text-align: center; margin: 30px 0;">
-            <p style="color: #F5E6D3;">Having trouble viewing the QR codes?</p>
-            <a href="https://ftcmarch.com.ng/tickets?email=${encodeURIComponent(email)}" class="fallback-link">
-              VIEW ALL YOUR TICKETS ONLINE
+            <p style="color: #F5E6D3; margin-bottom: 15px;">Having trouble viewing your tickets?</p>
+            <a href="https://ftc-march-madness-frontend.onrender.com/tickets?email=${encodeURIComponent(email)}" class="online-link">
+              📱 VIEW ALL TICKETS ONLINE
             </a>
           </div>
           
           <div class="footer">
             <p>These tickets are unique and non-transferable.</p>
-            <p>Present the QR codes at the entrance for scanning.</p>
-            <p>If QR codes don't load, provide your Ticket ID at the door.</p>
-            <p>©️ 2026 FTC · MARCH MADNESS · ALL RIGHTS RESERVED</p>
+            <p>Present QR code or Ticket ID at the entrance.</p>
+            <p>If you have any issues, contact support@ftcmarch.com</p>
+            <p style="margin-top: 15px;">© 2026 FTC · MARCH MADNESS · ALL RIGHTS RESERVED</p>
           </div>
         </div>
       </body>
