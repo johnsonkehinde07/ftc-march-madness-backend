@@ -6,7 +6,7 @@ const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Updated to handle multiple tickets with Gmail-friendly QR display
+// Updated to handle multiple tickets with short codes and Gmail-friendly display
 const sendTicketEmailResend = async (tickets, primaryTicket) => {
   try {
     // Handle case where a single ticket is passed instead of array
@@ -35,6 +35,7 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
     tickets.forEach((ticket, index) => {
       // Safely get values with defaults
       const ticketId = ticket.ticketId || 'N/A';
+      const shortCode = ticket.shortCode || ticketId.slice(-6); // Use short code or last 6 of ID
       const ticketType = ticket.ticketType || 'RUNNER UP';
       const ticketPrice = ticket.price || 8700;
       const qrCode = ticket.qrCode || '';
@@ -50,6 +51,10 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
               <td style="padding: 8px 5px; color: #F5E6D3; font-family: monospace; font-size: 14px;">${ticketId}</td>
             </tr>
             <tr>
+              <td style="padding: 8px 5px; color: #C69C6D; font-weight: bold;">SHORT CODE:</td>
+              <td style="padding: 8px 5px; color: #F5E6D3; font-size: 24px; font-weight: bold; letter-spacing: 3px;">${shortCode}</td>
+            </tr>
+            <tr>
               <td style="padding: 8px 5px; color: #C69C6D; font-weight: bold;">TYPE:</td>
               <td style="padding: 8px 5px; color: #F5E6D3;">${ticketType}</td>
             </tr>
@@ -59,6 +64,17 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
             </tr>
           </table>
           
+          <!-- SHORT CODE HIGHLIGHT - ALWAYS VISIBLE -->
+          <div style="text-align: center; margin: 20px 0; background: #333; padding: 15px; border: 3px solid #C69C6D;">
+            <p style="color: #C69C6D; margin: 0 0 5px 0; font-size: 14px; font-weight: bold;">🔑 ENTRY CODE</p>
+            <p style="color: white; font-size: 48px; font-family: monospace; font-weight: bold; letter-spacing: 8px; margin: 10px 0; background: #222; padding: 15px;">
+              ${shortCode}
+            </p>
+            <p style="color: #DCC7B0; font-size: 14px; margin: 0;">
+              Use this code at the entrance if QR doesn't scan
+            </p>
+          </div>
+          
           <!-- QR CODE SECTION - Multiple fallbacks for Gmail -->
           ${qrCode ? `
           <div style="text-align: center; margin: 20px 0; background: #ffffff; padding: 20px; border: 2px solid #C69C6D;">
@@ -67,26 +83,15 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
             <!-- Method 1: Standard image (works in most clients) -->
             <img src="${qrCode}" alt="QR Code for ticket ${ticketId}" width="200" height="200" style="display: block; margin: 0 auto; max-width: 100%; height: auto; border: 3px solid #C69C6D;">
             
-            <!-- Method 2: Text fallback for Gmail (always works) -->
-            <div style="margin-top: 20px; padding: 15px; background: #1A1212; border: 2px solid #8B1E1E;">
-              <p style="color: #C69C6D; margin: 0 0 10px 0; font-weight: bold; font-size: 14px;">⬇️ TICKET ID (USE IF QR FAILS) ⬇️</p>
-              <p style="color: #F5E6D3; font-size: 18px; font-family: monospace; background: #333; padding: 10px; letter-spacing: 2px; border-radius: 4px;">
-                ${ticketId}
-              </p>
-              <p style="color: #DCC7B0; font-size: 12px; margin: 10px 0 0 0;">
-                Present this ID at the entrance if QR code doesn't scan
-              </p>
-            </div>
-            
-            <!-- Method 3: Direct link to view online -->
+            <!-- Method 2: Direct link to view online -->
             <div style="margin-top: 15px;">
               <a href="https://ftc-march-madness-frontend.onrender.com/ticket.html?id=${ticketId}" 
-                 style="background: #8B1E1E; color: white; padding: 12px 25px; text-decoration: none; border: 2px solid #C69C6D; display: inline-block; font-weight: bold; font-size: 14px;">
+                 style="background: #8B1E1E; color: white; padding: 12px 25px; text-decoration: none; border: 2px solid #C69C6D; display: inline-block; font-weight: bold; font-size: 14px; margin: 5px;">
                  🔗 VIEW TICKET ONLINE
               </a>
             </div>
           </div>
-          ` : '<p style="color: #8B1E1E; text-align: center; padding: 20px;">QR Code pending - please contact support</p>'}
+          ` : '<p style="color: #8B1E1E; text-align: center; padding: 20px;">QR Code pending - use short code above</p>'}
         </div>
       `;
     });
@@ -226,7 +231,7 @@ const sendTicketEmailResend = async (tickets, primaryTicket) => {
           
           <div class="footer">
             <p>These tickets are unique and non-transferable.</p>
-            <p>Present QR code or Ticket ID at the entrance.</p>
+            <p>Present QR code or SHORT CODE at the entrance.</p>
             <p>If you have any issues, contact support@ftcmarch.com</p>
             <p style="margin-top: 15px;">© 2026 FTC · MARCH MADNESS · ALL RIGHTS RESERVED</p>
           </div>
