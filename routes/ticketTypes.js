@@ -184,4 +184,46 @@ router.post('/restock/:typeName', adminAuth, async (req, res) => {
   }
 });
 
+// NEW: Set ticket type to SOLD OUT
+router.post('/soldout/:typeName', adminAuth, async (req, res) => {
+  try {
+    const { typeName } = req.params;
+    
+    const event = await Event.getEvent();
+    const ticketType = event.ticketTypes.find(t => t.name === typeName);
+    
+    if (!ticketType) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Ticket type not found' 
+      });
+    }
+    
+    // Set to sold out (inactive and limit equals sold)
+    ticketType.isActive = false;
+    
+    await event.save();
+    
+    console.log(`❌ ${typeName} marked as SOLD OUT`);
+    
+    res.json({
+      success: true,
+      message: `✅ ${typeName} marked as SOLD OUT`,
+      data: {
+        name: ticketType.name,
+        isActive: ticketType.isActive,
+        sold: ticketType.sold,
+        limit: ticketType.limit
+      }
+    });
+    
+  } catch (error) {
+    console.error('Sold out error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error marking as sold out: ' + error.message 
+    });
+  }
+});
+
 module.exports = router;
