@@ -69,6 +69,7 @@ app.use('/api/tickets', require('./routes/tickets'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/validate', require('./routes/validate'));
 app.use('/api/webhook', require('./routes/webhook'));
+app.use('/api/ticket-types', require('./routes/ticketTypes'));
 
 // Health check
 app.get('/api/health', (req, res) => {

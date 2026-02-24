@@ -11,20 +11,17 @@ const adminAuth = (req, res, next) => {
   next();
 };
 
-// Get all ticket types (public)
+// Get all ticket types
 router.get('/', async (req, res) => {
   try {
     const event = await Event.getEvent();
-    res.json({
-      success: true,
-      data: event.ticketTypes
-    });
+    res.json({ success: true, data: event.ticketTypes });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Add new ticket type (admin only)
+// Add new ticket type
 router.post('/add', adminAuth, async (req, res) => {
   try {
     const { name, price, limit, description } = req.body;
@@ -65,13 +62,14 @@ router.post('/add', adminAuth, async (req, res) => {
       message: `Ticket type "${name}" added successfully`,
       data: event.ticketTypes
     });
+    
   } catch (error) {
     console.error('Error adding ticket type:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Update ticket type (admin only)
+// Update ticket type
 router.put('/update/:typeName', adminAuth, async (req, res) => {
   try {
     const { typeName } = req.params;
@@ -87,7 +85,6 @@ router.put('/update/:typeName', adminAuth, async (req, res) => {
       });
     }
     
-    // Update allowed fields
     if (updates.price !== undefined) ticketType.price = updates.price;
     if (updates.limit !== undefined) ticketType.limit = updates.limit;
     if (updates.description !== undefined) ticketType.description = updates.description;
@@ -100,42 +97,50 @@ router.put('/update/:typeName', adminAuth, async (req, res) => {
       message: `Ticket type "${typeName}" updated`,
       data: ticketType
     });
+    
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Deactivate ticket type (admin only)
-router.delete('/deactivate/:typeName', adminAuth, async (req, res) => {
+// Delete ticket type
+router.delete('/delete/:typeName', adminAuth, async (req, res) => {
   try {
     const { typeName } = req.params;
     
     const event = await Event.getEvent();
-    const ticketType = event.ticketTypes.find(t => t.name === typeName);
+    const initialLength = event.ticketTypes.length;
     
-    if (!ticketType) {
+    event.ticketTypes = event.ticketTypes.filter(t => t.name !== typeName);
+    
+    if (event.ticketTypes.length === initialLength) {
       return res.status(404).json({ 
         success: false, 
-        message: 'Ticket type not found' 
+        message: `Ticket type "${typeName}" not found` 
       });
     }
     
-    ticketType.isActive = false;
     await event.save();
     
     res.json({
       success: true,
-      message: `Ticket type "${typeName}" deactivated`
+      message: `Ticket type "${typeName}" deleted successfully`
     });
+    
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error deleting ticket type:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error deleting ticket type: ' + error.message 
+    });
   }
 });
 
-// Reset sold count for a ticket type (admin only)
-router.post('/reset/:typeName', adminAuth, async (req, res) => {
+// Restock ticket type (reset sold count)
+router.post('/restock/:typeName', adminAuth, async (req, res) => {
   try {
     const { typeName } = req.params;
+    const { newLimit } = req.body;
     
     const event = await Event.getEvent();
     const ticketType = event.ticketTypes.find(t => t.name === typeName);
@@ -147,20 +152,35 @@ router.post('/reset/:typeName', adminAuth, async (req, res) => {
       });
     }
     
+    // Reset sold count
     ticketType.sold = 0;
+    
+    // Update limit if provided
+    if (newLimit) {
+      ticketType.limit = newLimit;
+    }
+    
+    // Make sure it's active
+    ticketType.isActive = true;
+    
     await event.save();
     
     res.json({
       success: true,
-      message: `Sold count reset for "${typeName}"`,
+      message: `✅ ${typeName} restocked successfully`,
       data: {
         name: ticketType.name,
-        available: ticketType.limit,
-        sold: ticketType.sold
+        available: ticketType.limit - ticketType.sold,
+        limit: ticketType.limit
       }
     });
+    
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Restock Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error restocking tickets: ' + error.message 
+    });
   }
 });
 
