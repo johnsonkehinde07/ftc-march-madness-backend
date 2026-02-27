@@ -184,7 +184,7 @@ router.post('/restock/:typeName', adminAuth, async (req, res) => {
   }
 });
 
-// NEW: Set ticket type to SOLD OUT
+// Set ticket type to SOLD OUT
 router.post('/soldout/:typeName', adminAuth, async (req, res) => {
   try {
     const { typeName } = req.params;
@@ -199,7 +199,7 @@ router.post('/soldout/:typeName', adminAuth, async (req, res) => {
       });
     }
     
-    // Set to sold out (inactive and limit equals sold)
+    // Set to sold out (inactive)
     ticketType.isActive = false;
     
     await event.save();
