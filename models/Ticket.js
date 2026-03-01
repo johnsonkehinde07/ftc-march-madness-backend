@@ -49,7 +49,7 @@ const ticketSchema = new mongoose.Schema({
   ticketType: {
     type: String,
     required: true,
-    enum: ['FAST FAST', 'WINNERS FC', 'RUNNER UP', 'BRONZE', 'REGULAR', 'VIP', 'EARLY BIRD']
+    enum: ['FAST FAST', 'WINNERS FC', 'RUNNER UP', 'BRONZE', 'REGULAR', 'VIP', 'BACK2SKUUL', 'EARLY BIRD']
   },
   price: {
     type: Number,
