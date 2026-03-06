@@ -19,7 +19,7 @@ const eventSchema = new mongoose.Schema({
       name: { 
         type: String, 
         required: true,
-        enum: ['FAST FAST', 'WINNERS FC', 'RUNNER UP', 'BRONZE', 'REGULAR', 'VIP', 'BACK2SKUUL','BATCH D', 'EARLY BIRD'] // ADDED BRONZE
+        enum: ['FAST FAST', 'WINNERS FC', 'RUNNER UP', 'BRONZE', 'REGULAR', 'VIP', 'BACK2SKUUL','BATCH D','FINAL', 'EARLY BIRD'] // ADDED BRONZE
       },
       price: { 
         type: Number, 
